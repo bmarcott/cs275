@@ -83,6 +83,52 @@ dJointID mlLegJoint;
 dJointID brLegJoint;
 dJointID blLegJoint;
 
+void createFrontLegs()
+{
+	dReal xPos = -1;
+	dReal yPos = 3.5;
+	dReal zPos = -4;
+	dReal xRot = PI / 3;
+	dReal yRot = 0;
+	dReal zRot = 0;
+	dReal radius = 0.15;
+	dReal length = 4;
+
+	dMatrix3 frLegOrient;
+	dRFromEulerAngles(frLegOrient, xRot, yRot, zRot);
+
+	dMatrix3 flLegOrient;
+	dRFromEulerAngles(flLegOrient, xRot, -yRot, zRot);
+
+	frLeg.Body = dBodyCreate(World);
+	dBodySetPosition(frLeg.Body, xPos, yPos, zPos);
+	dBodySetRotation(frLeg.Body, frLegOrient);
+	dBodySetLinearVel(frLeg.Body, 0, 0, 0);
+	dBodySetData(frLeg.Body, (void *)0);
+	dMass frLegMass;
+	dMassSetCapsule(&frLegMass, 1, 3, radius, length);
+	frLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(frLeg.Geom[0], frLeg.Body);
+
+	frLegJoint = dJointCreateFixed(World, jointgroup);
+	dJointAttach(frLegJoint, body.Body, frLeg.Body);
+	dJointSetFixed(frLegJoint);
+
+	flLeg.Body = dBodyCreate(World);
+	dBodySetPosition(flLeg.Body, -xPos, yPos, zPos);
+	dBodySetRotation(flLeg.Body, flLegOrient);
+	dBodySetLinearVel(flLeg.Body, 0, 0, 0);
+	dBodySetData(flLeg.Body, (void *)0);
+	dMass flLegMass;
+	dMassSetCapsule(&flLegMass, 1, 3, radius, length);
+	flLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(flLeg.Geom[0], flLeg.Body);
+
+	flLegJoint = dJointCreateFixed(World, jointgroup);
+	dJointAttach(flLegJoint, body.Body, flLeg.Body);
+	dJointSetFixed(flLegJoint);
+}
+
 void createFrontRightLeg(dMatrix3 orient)
 {
 	frLeg.Body = dBodyCreate(World);
@@ -129,6 +175,67 @@ void createFrontLeftLeg(dMatrix3 orient)
 	
 	dJointSetHingeAnchor(flLegJoint, 1, 5, 2);
 	dJointSetHingeAxis(flLegJoint, 0, 0, 1);*/
+}
+
+void createMiddleLegs() {
+
+	dReal xPos = -3;
+	dReal yPos = 2.5;
+	dReal zPos = -2.5;
+	dReal xRot = PI / 4;
+	dReal yRot = -PI / 6;
+	dReal zRot = 0;
+	dReal radius = 0.15;
+	dReal length = 7.5;
+
+	dReal angleMax = PI / 3;
+	dReal angleMin = 0;
+	
+
+	dMatrix3 mrLegOrient;
+	dRFromEulerAngles(mrLegOrient, xRot, yRot, zRot);
+
+	dMatrix3 mlLegOrient;
+	dRFromEulerAngles(mlLegOrient, xRot, -yRot, zRot);
+
+	//middle right leg
+	middleRightLeg.Body = dBodyCreate(World);
+	dBodySetPosition(middleRightLeg.Body, xPos, yPos, zPos);
+	dBodySetRotation(middleRightLeg.Body, mrLegOrient);
+	dBodySetLinearVel(middleRightLeg.Body, 0, 0, 0);
+	dBodySetData(middleRightLeg.Body, (void *)0);
+	dMass midRLegMass;
+	dMassSetCapsule(&midRLegMass, 1, 3, radius, length);
+	middleRightLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(middleRightLeg.Geom[0], middleRightLeg.Body);
+
+	mrLegJoint = dJointCreateUniversal(World, jointgroup);
+	dJointSetUniversalAnchor(mrLegJoint, -1, 5, 0);
+	dJointSetUniversalAxis1(mrLegJoint, 0, 0, 1);
+	dJointSetUniversalAxis2(mrLegJoint, 0, 1, 0);
+	dJointSetUniversalParam(mrLegJoint, dParamHiStop, angleMax);
+	dJointSetUniversalParam(mrLegJoint, dParamLoStop, angleMin);
+	dJointAttach(mrLegJoint, body.Body, middleRightLeg.Body);
+
+	//middle left leg
+	middleLeftLeg.Body = dBodyCreate(World);
+	dBodySetPosition(middleLeftLeg.Body, -xPos, yPos, zPos);
+	dBodySetRotation(middleLeftLeg.Body, mlLegOrient);
+	dBodySetLinearVel(middleLeftLeg.Body, 0, 0, 0);
+	dBodySetData(middleLeftLeg.Body, (void *)0);
+	dMass midLLegMass;
+	dMassSetCapsule(&midLLegMass, 1, 3, radius, length);
+	middleLeftLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(middleLeftLeg.Geom[0], middleLeftLeg.Body);
+
+	mlLegJoint = dJointCreateUniversal(World, jointgroup);
+	dJointSetUniversalAnchor(mlLegJoint, 1, 5, 0);
+	dJointSetUniversalAxis1(mlLegJoint, 0, 0, 1);
+	dJointSetUniversalAxis2(mlLegJoint, 0, 1, 0);
+	dJointSetUniversalParam(mlLegJoint, dParamHiStop, angleMax);
+	dJointSetUniversalParam(mlLegJoint, dParamLoStop, angleMin);
+	dJointAttach(mlLegJoint, body.Body, middleLeftLeg.Body);
+
 }
 
 void createMiddleRightLeg(dMatrix3 orient)
@@ -191,7 +298,7 @@ void createBackLegs()
 
 	dReal xPos = -3;
 	dReal yPos = 2.5;
-	dReal zPos = 5.5;
+	dReal zPos = 3.5;
 	dReal xRot = -PI / 4;
 	dReal yRot = PI / 6;
 	dReal zRot = 0;
@@ -202,7 +309,8 @@ void createBackLegs()
 	dRFromEulerAngles(brLegOrient, xRot, yRot, zRot);
 
 	dMatrix3 blLegOrient;
-	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot;)
+	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot);
+
 
 	//Back right leg
 	brLeg.Body = dBodyCreate(World);
@@ -226,8 +334,8 @@ void createBackLegs()
 	dBodySetLinearVel(blLeg.Body, 0, 0, 0);
 	dBodySetData(blLeg.Body, (void *)0);
 	dMass blLegMass;
-	dMassSetCapsule(&blLegMass, 1, 3, 0.15, 2);
-	blLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
+	dMassSetCapsule(&blLegMass, 1, 3, radius, length);
+	blLeg.Geom[0] = dCreateCapsule(Space, radius, length);
 	dGeomSetBody(blLeg.Geom[0], blLeg.Body);
 
 	blLegJoint = dJointCreateFixed(World, jointgroup);
@@ -386,12 +494,15 @@ void initODE()
 	dRFromEulerAngles(lLegOrient, PI / 2, PI / 3, 0);
 
 
-	createFrontRightLeg(rLegOrient);
-	createMiddleRightLeg(rLegOrient);
-	createBackRightLeg(brLegOrient);
-	createFrontLeftLeg(lLegOrient);
-	createMiddleLeftLeg(lLegOrient);
-	createBackLeftLeg(lLegOrient);
+	//createFrontRightLeg(rLegOrient);
+	//createMiddleRightLeg(rLegOrient);
+	//createBackRightLeg(brLegOrient);
+	//createFrontLeftLeg(lLegOrient);
+	//createMiddleLeftLeg(lLegOrient);
+	//createBackLeftLeg(lLegOrient);
+	createFrontLegs();
+	createMiddleLegs();
+	createBackLegs();
 
 	/*Joint2 = dJointCreateFixed(World, jointgroup);
 	dJointAttach(Joint2, body.Body, 0);
@@ -431,6 +542,11 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 	//Get the dynamics body for each potentially colliding geometry.
 	dBodyID b1 = dGeomGetBody( o1 );
 	dBodyID b2 = dGeomGetBody( o2 );
+
+	if (body.Geom[0] == o1 || body.Geom[0] == o2)
+	{
+		return;
+	}
 
 	//Create an array of dContact objects to hold the contact joints.
 	dContact contacts[ MAX_CONTACTS ];
@@ -635,12 +751,12 @@ void myKey(unsigned char key, int x, int y)
 			dJointAddUniversalTorques(mrLegJoint, -50, 0);
 		break;
 		case 'o':
-			dJointAddUniversalTorques(mlLegJoint, -25, 100);
-			dJointAddUniversalTorques(mrLegJoint, -25, -100);
+			dJointAddUniversalTorques(mlLegJoint, -25, 150);
+			dJointAddUniversalTorques(mrLegJoint, -25, -150);
 		break;
 		case 'p':
-			dJointAddUniversalTorques(mlLegJoint, 50, -50);
-			dJointAddUniversalTorques(mrLegJoint, 50, 50);
+			dJointAddUniversalTorques(mlLegJoint, 100, -50);
+			dJointAddUniversalTorques(mrLegJoint, 100, 50);
 		break;
 		case 'g':
 			/*dJointAddHingeTorque(mrLegJoint, 100);
