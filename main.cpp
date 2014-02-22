@@ -215,7 +215,11 @@ void createBackLegs()
 
 	dMatrix3 blLegOrient;
 <<<<<<< HEAD
+<<<<<<< HEAD
 	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot);
+=======
+	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot;)
+>>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
 =======
 	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot;)
 >>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
@@ -229,9 +233,12 @@ void createBackLegs()
 	dMass brLegMass;
 	dMassSetCapsule(&brLegMass, 1, 3, radius, length);
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 	dBodySetMass( frLeg.Body, &brLegMass );
 
+=======
+>>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
 =======
 >>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
 	brLeg.Geom[0] = dCreateCapsule(Space, radius, length);
@@ -249,11 +256,16 @@ void createBackLegs()
 	dBodySetData(blLeg.Body, (void *)0);
 	dMass blLegMass;
 <<<<<<< HEAD
+<<<<<<< HEAD
 	dMassSetCapsule(&blLegMass, 1, 3, radius, length);
 
 	dBodySetMass( blLeg.Body, &blLegMass );
 
 	blLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+=======
+	dMassSetCapsule(&blLegMass, 1, 3, 0.15, 2);
+	blLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
+>>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
 =======
 	dMassSetCapsule(&blLegMass, 1, 3, 0.15, 2);
 	blLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
@@ -419,7 +431,11 @@ void initODE()
 	createFrontRightLeg(rLegOrient);
 	createMiddleRightLeg(rLegOrient);
 <<<<<<< HEAD
+<<<<<<< HEAD
 	//createBackRightLeg(brLegOrient);
+=======
+	createBackRightLeg(brLegOrient);
+>>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
 =======
 	createBackRightLeg(brLegOrient);
 >>>>>>> d691c16fa799ca013cc0e75955b9dae48719dc15
