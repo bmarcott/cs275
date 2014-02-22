@@ -138,6 +138,9 @@ void createFrontRightLeg(dMatrix3 orient)
 	dBodySetData(frLeg.Body, (void *)0);
 	dMass frLegMass;
 	dMassSetCapsule(&frLegMass, 1, 3, 0.15, 2);
+
+	dBodySetMass( frLeg.Body, &frLegMass );
+
 	frLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
 	dGeomSetBody(frLeg.Geom[0], frLeg.Body);
 
@@ -162,6 +165,9 @@ void createFrontLeftLeg(dMatrix3 orient)
 	dBodySetData(flLeg.Body, (void *)0);
 	dMass flLegMass;
 	dMassSetCapsule(&flLegMass, 1, 3, 0.15, 2);
+
+	dBodySetMass( frLeg.Body, &flLegMass );
+
 	flLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
 	dGeomSetBody(flLeg.Geom[0], flLeg.Body);
 
@@ -247,6 +253,9 @@ void createMiddleRightLeg(dMatrix3 orient)
 	dBodySetData(middleRightLeg.Body, (void *)0);
 	dMass midRLegMass;
 	dMassSetCapsule(&midRLegMass, 1, 3, 0.15, 2);
+	
+	dBodySetMass( frLeg.Body, &midRLegMass );
+	
 	middleRightLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
 	dGeomSetBody(middleRightLeg.Geom[0], middleRightLeg.Body);
 
@@ -277,6 +286,9 @@ void createMiddleLeftLeg(dMatrix3 orient)
 	dBodySetData(middleLeftLeg.Body, (void *)0);
 	dMass midLLegMass;
 	dMassSetCapsule(&midLLegMass, 1, 3, 0.15, 2);
+
+	dBodySetMass( frLeg.Body, &midLLegMass );
+
 	middleLeftLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
 	dGeomSetBody(middleLeftLeg.Geom[0], middleLeftLeg.Body);
 
@@ -309,6 +321,7 @@ void createBackLegs()
 	dRFromEulerAngles(brLegOrient, xRot, yRot, zRot);
 
 	dMatrix3 blLegOrient;
+
 	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot);
 
 
@@ -320,6 +333,11 @@ void createBackLegs()
 	dBodySetData(brLeg.Body, (void *)0);
 	dMass brLegMass;
 	dMassSetCapsule(&brLegMass, 1, 3, radius, length);
+
+
+	dBodySetMass( frLeg.Body, &brLegMass );
+
+
 	brLeg.Geom[0] = dCreateCapsule(Space, radius, length);
 	dGeomSetBody(brLeg.Geom[0], brLeg.Body);
 
@@ -334,8 +352,16 @@ void createBackLegs()
 	dBodySetLinearVel(blLeg.Body, 0, 0, 0);
 	dBodySetData(blLeg.Body, (void *)0);
 	dMass blLegMass;
+
+
+
 	dMassSetCapsule(&blLegMass, 1, 3, radius, length);
+
+	dBodySetMass( blLeg.Body, &blLegMass );
+
 	blLeg.Geom[0] = dCreateCapsule(Space, radius, length);
+
+
 	dGeomSetBody(blLeg.Geom[0], blLeg.Body);
 
 	blLegJoint = dJointCreateFixed(World, jointgroup);
@@ -503,6 +529,7 @@ void initODE()
 	createFrontLegs();
 	createMiddleLegs();
 	createBackLegs();
+
 
 	/*Joint2 = dJointCreateFixed(World, jointgroup);
 	dJointAttach(Joint2, body.Body, 0);
