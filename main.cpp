@@ -39,8 +39,8 @@ int g_recording = 0;
 void resetArcball();
 void save_image();
 
-const float PI = 3.1415926535;
 const int STRLEN = 100;
+const double PI = 3.1415926535;
 typedef char STR[STRLEN];
 
 #define X 0
@@ -83,339 +83,193 @@ dJointID mlLegJoint;
 dJointID brLegJoint;
 dJointID blLegJoint;
 
+/*
+=================================================================================
+createFixedLeg
+
+	Use parameters to create leg body/geom and attach to body with fixed joint
+=================================================================================
+*/
+void createFixedLeg(MyObject &leg,
+	dJointID& joint,
+	dReal xPos, dReal yPos, dReal zPos,
+	dReal xRot, dReal yRot, dReal zRot,
+	dReal radius,
+	dReal length)
+{
+	dMatrix3 legOrient;
+	dRFromEulerAngles(legOrient, xRot, yRot, zRot);
+
+	//position and orientation
+	leg.Body = dBodyCreate(World);
+	dBodySetPosition(leg.Body, xPos, yPos, zPos);
+	dBodySetRotation(leg.Body, legOrient);
+	dBodySetLinearVel(leg.Body, 0, 0, 0);
+	dBodySetData(leg.Body, (void *)0);
+
+	//mass
+	dMass legMass;
+	dMassSetCapsule(&legMass, 1, 3, radius, length);
+	dBodySetMass(leg.Body, &legMass);
+
+	//geometry
+	leg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(leg.Geom[0], leg.Body);
+
+	//fixed joint
+	joint = dJointCreateFixed(World, jointgroup);
+	dJointAttach(joint, body.Body, leg.Body);
+	dJointSetFixed(joint);
+}
+
+/*
+=================================================================================
+createUniversalLeg
+
+Use parameters to create leg body/geom and attach to body with universal joint
+
+**Warning**
+mass is not set
+=================================================================================
+*/
+void createUniversalLeg(MyObject &leg,
+	dJointID& joint,
+	dReal xPos, dReal yPos, dReal zPos,
+	dReal xRot, dReal yRot, dReal zRot,
+	dReal radius, dReal length,
+	dReal maxAngle,	dReal minAngle,
+	dReal anchorXPos, dReal anchorYPos, dReal anchorZPos)
+{
+	dMatrix3 legOrient;
+	dRFromEulerAngles(legOrient, xRot, yRot, zRot);
+
+	//position and orientation
+	leg.Body = dBodyCreate(World);
+	dBodySetPosition(leg.Body, xPos, yPos, zPos);
+	dBodySetRotation(leg.Body, legOrient);
+	dBodySetLinearVel(leg.Body, 0, 0, 0);
+	dBodySetData(leg.Body, (void *)0);
+
+	//mass
+	dMass legMass;
+	dMassSetCapsule(&legMass, 1, 3, radius, length);
+	//dBodySetMass(leg.Body, &legMass);
+
+	//geometry
+	leg.Geom[0] = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(leg.Geom[0], leg.Body);
+
+	//universal joint
+	joint = dJointCreateUniversal(World, jointgroup);
+
+	//axes
+	dJointSetUniversalAxis1(joint, 0, 0, 1);
+	dJointSetUniversalAxis2(joint, 0, 1, 0);
+
+	//Max and min angles
+	dJointSetUniversalParam(joint, dParamHiStop, maxAngle);
+	dJointSetUniversalParam(joint, dParamLoStop, minAngle);
+	dJointSetUniversalParam(joint, dParamHiStop2, maxAngle);
+	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
+	
+	//attach and anchor
+	dJointAttach(joint, body.Body, leg.Body);
+	dJointSetUniversalAnchor(joint, anchorXPos, anchorYPos, anchorZPos);
+}
+
+/*
+=================================================================================
+createFrontLegs
+
+create front two legs of insect with fixed joints
+=================================================================================
+*/
 void createFrontLegs()
 {
-	dReal xPos = -1;
-	dReal yPos = 3.5;
-	dReal zPos = -4;
-	dReal xRot = PI / 3;
-	dReal yRot = 0;
-	dReal zRot = 0;
-	dReal radius = 0.15;
-	dReal length = 4;
+	const dReal xPos = -3.5;
+	const dReal yPos = 3.5;
+	const dReal zPos = -2;
+	const dReal xRot = PI / 2;
+	const dReal yRot = -PI / 3;
+	const dReal zRot = 0;
+	const dReal radius = 0.15;
+	const dReal length = 5;
 
-	dMatrix3 frLegOrient;
-	dRFromEulerAngles(frLegOrient, xRot, yRot, zRot);
-
-	dMatrix3 flLegOrient;
-	dRFromEulerAngles(flLegOrient, xRot, -yRot, zRot);
-
-	frLeg.Body = dBodyCreate(World);
-	dBodySetPosition(frLeg.Body, xPos, yPos, zPos);
-	dBodySetRotation(frLeg.Body, frLegOrient);
-	dBodySetLinearVel(frLeg.Body, 0, 0, 0);
-	dBodySetData(frLeg.Body, (void *)0);
-	dMass frLegMass;
-	dMassSetCapsule(&frLegMass, 1, 3, radius, length);
-	frLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(frLeg.Geom[0], frLeg.Body);
-
-	frLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(frLegJoint, body.Body, frLeg.Body);
-	dJointSetFixed(frLegJoint);
-
-	flLeg.Body = dBodyCreate(World);
-	dBodySetPosition(flLeg.Body, -xPos, yPos, zPos);
-	dBodySetRotation(flLeg.Body, flLegOrient);
-	dBodySetLinearVel(flLeg.Body, 0, 0, 0);
-	dBodySetData(flLeg.Body, (void *)0);
-	dMass flLegMass;
-	dMassSetCapsule(&flLegMass, 1, 3, radius, length);
-	flLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(flLeg.Geom[0], flLeg.Body);
-
-	flLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(flLegJoint, body.Body, flLeg.Body);
-	dJointSetFixed(flLegJoint);
+	//create front right leg
+	createFixedLeg(frLeg, frLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length);
+	//create front left leg
+	createFixedLeg(flLeg, flLegJoint, -xPos, yPos, zPos, -xRot, yRot, zRot, radius, length);
+	
 }
 
-void createFrontRightLeg(dMatrix3 orient)
-{
-	frLeg.Body = dBodyCreate(World);
-	dBodySetPosition(frLeg.Body, -3.5, 3.5, -2);
-	dBodySetRotation(frLeg.Body, orient);
-	dBodySetLinearVel(frLeg.Body, 0, 0, 0);
-	dBodySetData(frLeg.Body, (void *)0);
-	dMass frLegMass;
-	dMassSetCapsule(&frLegMass, 1, 3, 0.15, 2);
-
-	dBodySetMass( frLeg.Body, &frLegMass );
-
-	frLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
-	dGeomSetBody(frLeg.Geom[0], frLeg.Body);
-
-	frLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(frLegJoint, body.Body, frLeg.Body);
-	dJointSetFixed(frLegJoint);
-
-	//frLegJoint = dJointCreateHinge(World, jointgroup);
-	//dJointSetHingeParam(frLegJoint, dParamHiStop, PI / 6);
-	//dJointSetHingeParam(frLegJoint, dParamLoStop, -PI / 6);
-
-	//dJointSetHingeAnchor(frLegJoint, -1, 5, -2);
-	//dJointSetHingeAxis(frLegJoint, 0, 0, 1);
-}
-
-void createFrontLeftLeg(dMatrix3 orient)
-{
-	flLeg.Body = dBodyCreate(World);
-	dBodySetPosition(flLeg.Body, 3.5, 3.5, -2);
-	dBodySetRotation(flLeg.Body, orient);
-	dBodySetLinearVel(flLeg.Body, 0, 0, 0);
-	dBodySetData(flLeg.Body, (void *)0);
-	dMass flLegMass;
-	dMassSetCapsule(&flLegMass, 1, 3, 0.15, 2);
-
-	dBodySetMass( frLeg.Body, &flLegMass );
-
-	flLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
-	dGeomSetBody(flLeg.Geom[0], flLeg.Body);
-
-	flLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(flLegJoint, body.Body, flLeg.Body);
-	dJointSetFixed(flLegJoint);
 /*
-	flLegJoint = dJointCreateHinge(World, jointgroup);
-	dJointSetHingeParam(flLegJoint, dParamHiStop, PI / 6);
-	dJointSetHingeParam(flLegJoint, dParamLoStop, -PI / 6);
-	
-	dJointSetHingeAnchor(flLegJoint, 1, 5, 2);
-	dJointSetHingeAxis(flLegJoint, 0, 0, 1);*/
-}
+=================================================================================
+void createMiddleLegs
 
-void createMiddleLegs() {
+create middle two legs of insect with universal joints
 
-	dReal xPos = -3;
-	dReal yPos = 2.5;
-	dReal zPos = -2.5;
-	dReal xRot = PI / 4;
-	dReal yRot = -PI / 6;
-	dReal zRot = 0;
-	dReal radius = 0.15;
-	dReal length = 7.5;
-
-	dReal angleMax = PI / 3;
-	dReal angleMin = 0;
-	
-
-	dMatrix3 mrLegOrient;
-	dRFromEulerAngles(mrLegOrient, xRot, yRot, zRot);
-
-	dMatrix3 mlLegOrient;
-	dRFromEulerAngles(mlLegOrient, xRot, -yRot, zRot);
-
-	//middle right leg
-	middleRightLeg.Body = dBodyCreate(World);
-	dBodySetPosition(middleRightLeg.Body, xPos, yPos, zPos);
-	dBodySetRotation(middleRightLeg.Body, mrLegOrient);
-	dBodySetLinearVel(middleRightLeg.Body, 0, 0, 0);
-	dBodySetData(middleRightLeg.Body, (void *)0);
-	dMass midRLegMass;
-	dMassSetCapsule(&midRLegMass, 1, 3, radius, length);
-	middleRightLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(middleRightLeg.Geom[0], middleRightLeg.Body);
-
-	mrLegJoint = dJointCreateUniversal(World, jointgroup);
-	dJointSetUniversalAnchor(mrLegJoint, -1, 5, 0);
-	dJointSetUniversalAxis1(mrLegJoint, 0, 0, 1);
-	dJointSetUniversalAxis2(mrLegJoint, 0, 1, 0);
-	dJointSetUniversalParam(mrLegJoint, dParamHiStop, angleMax);
-	dJointSetUniversalParam(mrLegJoint, dParamLoStop, angleMin);
-	dJointAttach(mrLegJoint, body.Body, middleRightLeg.Body);
-
-	//middle left leg
-	middleLeftLeg.Body = dBodyCreate(World);
-	dBodySetPosition(middleLeftLeg.Body, -xPos, yPos, zPos);
-	dBodySetRotation(middleLeftLeg.Body, mlLegOrient);
-	dBodySetLinearVel(middleLeftLeg.Body, 0, 0, 0);
-	dBodySetData(middleLeftLeg.Body, (void *)0);
-	dMass midLLegMass;
-	dMassSetCapsule(&midLLegMass, 1, 3, radius, length);
-	middleLeftLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(middleLeftLeg.Geom[0], middleLeftLeg.Body);
-
-	mlLegJoint = dJointCreateUniversal(World, jointgroup);
-	dJointSetUniversalAnchor(mlLegJoint, 1, 5, 0);
-	dJointSetUniversalAxis1(mlLegJoint, 0, 0, 1);
-	dJointSetUniversalAxis2(mlLegJoint, 0, 1, 0);
-	dJointSetUniversalParam(mlLegJoint, dParamHiStop, angleMax);
-	dJointSetUniversalParam(mlLegJoint, dParamLoStop, angleMin);
-	dJointAttach(mlLegJoint, body.Body, middleLeftLeg.Body);
-
-}
-
-void createMiddleRightLeg(dMatrix3 orient)
+**Warning**
+Masses not set due to createUniversalLeg function
+=================================================================================
+*/
+void createMiddleLegs()
 {
-	middleRightLeg.Body = dBodyCreate(World);
-	dBodySetPosition(middleRightLeg.Body, -3.5, 3.5, 0);
-	dBodySetRotation(middleRightLeg.Body, orient);
-	dBodySetLinearVel(middleRightLeg.Body, 0, 0, 0);
-	dBodySetData(middleRightLeg.Body, (void *)0);
-	dMass midRLegMass;
-	dMassSetCapsule(&midRLegMass, 1, 3, 0.15, 2);
-	
-	dBodySetMass( frLeg.Body, &midRLegMass );
-	
-	middleRightLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
-	dGeomSetBody(middleRightLeg.Geom[0], middleRightLeg.Body);
+	const dReal xPos = -3.5;
+	const dReal yPos = 3.5;
+	const dReal zPos = 0;
+	const dReal xRot = PI / 2;
+	const dReal yRot = -PI / 3;
+	const dReal zRot = 0;
+	const dReal radius = 0.15;
+	const dReal length = 5;
+	const dReal maxAngle = PI / 6;
+	const dReal minAngle = -PI / 6;
+	const dReal anchorXPos = -1;
+	const dReal anchorYPos = 5;
+	const dReal anchorZPos = 0;
 
-	mrLegJoint = dJointCreateUniversal(World, jointgroup);
-	dJointSetUniversalAnchor(mrLegJoint, -1, 5, 0);
-	dJointSetUniversalAxis1(mrLegJoint, 0, 0, 1);
-	dJointSetUniversalParam(mrLegJoint, dParamHiStop, PI / 6);
-	dJointSetUniversalParam(mrLegJoint, dParamLoStop, -PI / 6);
-	dJointSetUniversalAxis2(mrLegJoint, 0, 1, 0);
-	dJointSetUniversalParam(mrLegJoint, dParamHiStop, PI / 6);
-	dJointSetUniversalParam(mrLegJoint, dParamLoStop, -PI / 6);
-	dJointAttach(mrLegJoint, body.Body, middleRightLeg.Body);
+	//create middle right leg
+	createUniversalLeg(middleRightLeg,
+		mrLegJoint,
+		xPos, yPos, zPos,
+		xRot, yRot, zRot,
+		radius, length,
+		maxAngle, minAngle,
+		anchorXPos, anchorYPos, anchorZPos);
 
-	/*Joint = dJointCreateHinge(World, jointgroup);
-	dJointSetHingeParam(Joint, dParamHiStop, PI / 6);
-	dJointSetHingeParam(Joint, dParamLoStop, -PI / 6);
-	dJointAttach(Joint, body.Body, middleRightLeg.Body);
-	dJointSetHingeAnchor(Joint, -1, 5, 0);
-	dJointSetHingeAxis(Joint, 0, 0, 1);*/
+	//create middle left leg
+	createUniversalLeg(middleLeftLeg,
+		mlLegJoint,
+		-xPos, yPos, zPos,
+		xRot, -yRot, zRot,
+		radius, length,
+		maxAngle, minAngle,
+		-anchorXPos, anchorYPos, anchorZPos);
 }
 
-void createMiddleLeftLeg(dMatrix3 orient)
-{
-	middleLeftLeg.Body = dBodyCreate(World);
-	dBodySetPosition(middleLeftLeg.Body, 3.5, 3.5, 0);
-	dBodySetRotation(middleLeftLeg.Body, orient);
-	dBodySetLinearVel(middleLeftLeg.Body, 0, 0, 0);
-	dBodySetData(middleLeftLeg.Body, (void *)0);
-	dMass midLLegMass;
-	dMassSetCapsule(&midLLegMass, 1, 3, 0.15, 2);
+/*
+=================================================================================
+void createBackLegs
 
-	dBodySetMass( frLeg.Body, &midLLegMass );
-
-	middleLeftLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
-	dGeomSetBody(middleLeftLeg.Geom[0], middleLeftLeg.Body);
-
-	mlLegJoint = dJointCreateUniversal(World, jointgroup);
-	dJointSetUniversalAnchor(mlLegJoint, 1, 5, 0);
-	dJointSetUniversalAxis1(  mlLegJoint, 0, 0, 1);
-	dJointSetUniversalParam(mlLegJoint, dParamHiStop, PI / 6);
-	dJointSetUniversalParam(mlLegJoint, dParamLoStop, -PI / 6);
-	dJointSetUniversalAxis2 ( mlLegJoint, 0, 1, 0);
-	dJointSetUniversalParam(mlLegJoint, dParamHiStop, PI / 6);
-	dJointSetUniversalParam(mlLegJoint, dParamLoStop, -PI / 6);
-	dJointAttach(mlLegJoint, body.Body, middleLeftLeg.Body);
-	//dJointSetHingeAnchor(mlLegJoint, 1, 5, 0);
-	//dJointSetHingeAxis(mlLegJoint, 0, 0, 1);
-}
-
+create back two legs of insect with fixed joints
+=================================================================================
+*/
 void createBackLegs()
 {
+	const dReal xPos = -3.5;
+	const dReal yPos = 3.5;
+	const dReal zPos = 3;
+	const dReal xRot = PI / 2;
+	const dReal yRot = -PI / 3;
+	const dReal zRot = 0;
+	const dReal radius = 0.15;
+	const dReal length = 5;
 
-	dReal xPos = -3;
-	dReal yPos = 2.5;
-	dReal zPos = 3.5;
-	dReal xRot = -PI / 4;
-	dReal yRot = PI / 6;
-	dReal zRot = 0;
-	dReal radius = 0.15;
-	dReal length = 7.5;
+	//create front right leg
+	createFixedLeg(brLeg, brLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length);
+	//create front left leg
+	createFixedLeg(blLeg, blLegJoint, -xPos, yPos, zPos, -xRot, yRot, zRot, radius, length);
 
-	dMatrix3 brLegOrient;
-	dRFromEulerAngles(brLegOrient, xRot, yRot, zRot);
-
-	dMatrix3 blLegOrient;
-
-	dRFromEulerAngles(blLegOrient, xRot, -yRot, zRot);
-
-
-	//Back right leg
-	brLeg.Body = dBodyCreate(World);
-	dBodySetPosition(brLeg.Body, xPos, yPos, zPos);
-	dBodySetRotation(brLeg.Body, brLegOrient);
-	dBodySetLinearVel(brLeg.Body, 0, 0, 0);
-	dBodySetData(brLeg.Body, (void *)0);
-	dMass brLegMass;
-	dMassSetCapsule(&brLegMass, 1, 3, radius, length);
-
-
-	dBodySetMass( frLeg.Body, &brLegMass );
-
-
-	brLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(brLeg.Geom[0], brLeg.Body);
-
-	brLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(brLegJoint, body.Body, brLeg.Body);
-	dJointSetFixed(brLegJoint);
-
-	//Back left leg
-	blLeg.Body = dBodyCreate(World);
-	dBodySetPosition(blLeg.Body, -xPos, yPos, zPos);
-	dBodySetRotation(blLeg.Body, blLegOrient);
-	dBodySetLinearVel(blLeg.Body, 0, 0, 0);
-	dBodySetData(blLeg.Body, (void *)0);
-	dMass blLegMass;
-
-
-
-	dMassSetCapsule(&blLegMass, 1, 3, radius, length);
-
-	dBodySetMass( blLeg.Body, &blLegMass );
-
-	blLeg.Geom[0] = dCreateCapsule(Space, radius, length);
-
-
-	dGeomSetBody(blLeg.Geom[0], blLeg.Body);
-
-	blLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(blLegJoint, body.Body, blLeg.Body);
-	dJointSetFixed(blLegJoint);
-}
-
-void createBackRightLeg(dMatrix3 orient)
-{
-	brLeg.Body = dBodyCreate(World);
-	dBodySetPosition(brLeg.Body, -3, 2.5, 5.5);
-	dBodySetRotation(brLeg.Body, orient);
-	dBodySetLinearVel(brLeg.Body, 0, 0, 0);
-	dBodySetData(brLeg.Body, (void *)0);
-	dMass brLegMass;
-	dMassSetCapsule(&brLegMass, 1, 3, 0.15, 2);
-	brLeg.Geom[0] = dCreateCapsule(Space, 0.15, 7.5);
-	dGeomSetBody(brLeg.Geom[0], brLeg.Body);
-
-	brLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(brLegJoint, body.Body, brLeg.Body);
-	dJointSetFixed(brLegJoint);
-
-	/*brLegJoint = dJointCreateHinge(World, jointgroup);
-	dJointSetHingeParam(brLegJoint, dParamHiStop, PI / 6);
-	dJointSetHingeParam(brLegJoint, dParamLoStop, -PI / 6);
-	dJointAttach(brLegJoint, body.Body, brLeg.Body);
-	dJointSetHingeAnchor(brLegJoint, -1, 5, 3.5);
-	dJointSetHingeAxis(brLegJoint, 0, 0, 1);*/
-}
-
-void createBackLeftLeg(dMatrix3 orient)
-{
-	blLeg.Body = dBodyCreate(World);
-	dBodySetPosition(blLeg.Body, 3.5, 2.5, 5.5);
-	dBodySetRotation(blLeg.Body, orient);
-	dBodySetLinearVel(blLeg.Body, 0, 0, 0);
-	dBodySetData(blLeg.Body, (void *)0);
-	dMass blLegMass;
-	dMassSetCapsule(&blLegMass, 1, 3, 0.15, 2);
-	dBodySetMass(blLeg.Body, &blLegMass);
-	blLeg.Geom[0] = dCreateCapsule(Space, 0.15, 5);
-	dGeomSetBody(blLeg.Geom[0], blLeg.Body);
-
-	blLegJoint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(blLegJoint, body.Body, blLeg.Body);
-	dJointSetFixed(blLegJoint);
-
-	//blLegJoint = dJointCreateHinge(World, jointgroup);
-	//dJointSetHingeParam(blLegJoint, dParamHiStop, PI / 6);
-	//dJointSetHingeParam(blLegJoint, dParamLoStop, -PI / 6);
-	//dJointAttach(blLegJoint, body.Body, blLeg.Body);
-	//dJointSetHingeAnchor(blLegJoint, 1, 5, 3.5);
-	//dJointSetHingeAxis(blLegJoint, 0, 0, 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -453,57 +307,11 @@ void initODE()
 	//literal components of ax + by + cz = d.
 	dCreatePlane( Space, 0.0, 1.0, 0.0, 0.0 );
 
-	//Object.Body = dBodyCreate( World );		//Create a new body and attach it to object.
-	//dBodySetPosition( Object.Body, 0.0, 10, 0.0 );		//Assign position to body.
-	//dBodySetLinearVel( Object.Body, 0.0, 0.0, 0.0 );	//Object begins stationary.
-
-	//dMatrix3 Orient;						//Assign a random orientation.
-	//dReal axis[3];
-	//axis[0] = dRandReal()*2.0 - 1.0;		//Define the axis.
-	//axis[1] = dRandReal()*2.0 - 1.0;
-	//axis[2] = dRandReal()*2.0 - 1.0;
-	//dReal angle = dRandReal()*10.0 - 5.0;	//Define the angle.
-	//dRFromAxisAndAngle( Orient,	axis[0], axis[1], axis[2], angle );		//Create rotation matrix.
-	////dBodySetRotation( Object.Body, Orient );			//Assigns orientation to body.
-	//dBodySetData( Object.Body, (void *)0 );	//No data associated with data.
-
-	////Assigning the box mass that matches the desired geometry (a box). First, create a mass struct.
-	//dMass M;
-	//dReal sides[] = {2.0, 2.0, 0.5};		//Side lenghts along the x, y, and z axes.
-	//dMassSetBox( &M, 0.5, sides[0], sides[1], sides[2] );	//Use automatic generation of moment of inertia and mass.
-	//dBodySetMass( Object.Body, &M );		//Apply mass distribution to rigid body.
-
-	////Creating the actual geometry for the object.
-	//Object.Geom[0] = dCreateBox( Space, sides[0], sides[1], sides[2] );
-
-	////Associate the geometry with the object's dynamics body.
-	//dGeomSetBody( Object.Geom[0], Object.Body );
-
-	////Create rod
-	//Rod.Body = dBodyCreate(World);
-	//dBodySetPosition(Rod.Body, 0, 6.7, 0);
-	//dMatrix3 Orient2;
-	//dReal axis2[3];
-	//axis[0] = 1;
-	//axis[1] = axis[2] = 0;
-	//dReal angle2 = 90;
-	//dRFromAxisAndAngle(Orient2, axis2[0], axis2[1], axis2[2], angle2);
-
-	//dBodySetRotation(Rod.Body, Orient2);
-	//dBodySetLinearVel(Rod.Body, 0, 0, 0);
-
-	//dBodySetData(Rod.Body, (void *)0);
-	//dMass M2;
-	//dMassSetCylinder( &M2, 0.5, 3, 1, 4 );
-	//dBodySetMass(Rod.Body, &M2);
-	//Rod.Geom[0] = dCreateCylinder(Space, 1, 4);
-	//dGeomSetBody(Rod.Geom[0], Rod.Body);
-
 	//Create body
 	body.Body = dBodyCreate(World);
 	dBodySetPosition(body.Body, 0, 5, 0);
 	dMatrix3 Orient3;
-	dRFromAxisAndAngle(Orient3, 0, 0, 1, PI/2);
+	dRFromAxisAndAngle(Orient3, 0, 0, 1, 3.14/2);
 	//dBodySetRotation(body.Body, Orient3);
 	dBodySetLinearVel(body.Body, 0, 0, 0);
 	dBodySetData(body.Body, (void *)0);
@@ -514,21 +322,16 @@ void initODE()
 
 	dMatrix3 rLegOrient;
 	dMatrix3 lLegOrient;
-	dMatrix3 brLegOrient;
 
-	dRFromEulerAngles(rLegOrient, PI / 2, -PI / 3, 0);
-	dRFromEulerAngles(lLegOrient, PI / 2, PI / 3, 0);
+	dRFromEulerAngles(rLegOrient, 3.14 / 2, -3.14 / 3, 0);
+	dRFromEulerAngles(lLegOrient, 3.14 / 2, 3.14 / 3, 0);
 
-
-	//createFrontRightLeg(rLegOrient);
-	//createMiddleRightLeg(rLegOrient);
-	//createBackRightLeg(brLegOrient);
-	//createFrontLeftLeg(lLegOrient);
-	//createMiddleLeftLeg(lLegOrient);
-	//createBackLeftLeg(lLegOrient);
 	createFrontLegs();
 	createMiddleLegs();
 	createBackLegs();
+
+	/*createMiddleRightLeg(rLegOrient);
+	createMiddleLeftLeg(lLegOrient);*/
 
 
 	/*Joint2 = dJointCreateFixed(World, jointgroup);
@@ -541,6 +344,12 @@ void initODE()
 	dJointSetHingeAnchor(Joint, 0, 10 - sides[0] / 2, 0);
 	dJointSetHingeAxis(Joint, 1, 0, 0);*/
 
+	//dVector3 result;
+	//dJointGetUniversalAnchor(mrLegJoint, result);
+	//for (auto e : result)
+	//{
+	//	cout << e << endl;
+	//}
 	
 
 
@@ -569,11 +378,6 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 	//Get the dynamics body for each potentially colliding geometry.
 	dBodyID b1 = dGeomGetBody( o1 );
 	dBodyID b2 = dGeomGetBody( o2 );
-
-	if (body.Geom[0] == o1 || body.Geom[0] == o2)
-	{
-		return;
-	}
 
 	//Create an array of dContact objects to hold the contact joints.
 	dContact contacts[ MAX_CONTACTS ];
@@ -773,17 +577,25 @@ void myKey(unsigned char key, int x, int y)
 	float time;
 	switch (key) 
 	{
+		case 't':
+			dJointAddUniversalTorques(mlLegJoint, -50, 100);
+			//dJointAddUniversalTorques(mrLegJoint, -50, 0);
+		break;
+		case 'y':
+			dJointAddUniversalTorques(mlLegJoint, 50, -50);
+			//dJointAddUniversalTorques(mrLegJoint, -50, 0);
+			break;
 		case 'i':
 			dJointAddUniversalTorques(mlLegJoint, -50, 0);
 			dJointAddUniversalTorques(mrLegJoint, -50, 0);
 		break;
 		case 'o':
-			dJointAddUniversalTorques(mlLegJoint, -25, 150);
-			dJointAddUniversalTorques(mrLegJoint, -25, -150);
+			dJointAddUniversalTorques(mlLegJoint, -50, 100);
+			dJointAddUniversalTorques(mrLegJoint, -50, -100);
 		break;
 		case 'p':
-			dJointAddUniversalTorques(mlLegJoint, 100, -50);
-			dJointAddUniversalTorques(mrLegJoint, 100, 50);
+			dJointAddUniversalTorques(mlLegJoint, 50, -50);
+			dJointAddUniversalTorques(mrLegJoint, 50, 50);
 		break;
 		case 'g':
 			/*dJointAddHingeTorque(mrLegJoint, 100);
