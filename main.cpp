@@ -15,7 +15,7 @@ Basic Example for ODE Usage
 #include <math.h>
 #include <iostream>
 
-#include "angular_measure.h"
+#include "angle_conversions.h"
 
 using namespace std;
 
@@ -50,7 +50,7 @@ typedef char STR[STRLEN];
 #define Z 2
 
 // The eye point and look-at point.
-double g_eye[3] = {0.0, 100.0, 50.0};
+double g_eye[3] = {0.0, 500.0, 10.0};
 double g_ref[3] = {0.0, 0.0, 0.0};
 double g_time = 0.0 ;
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,6 +84,8 @@ dSpaceID Space;				//A space that defines collisions.
 dJointGroupID jointgroup;   // contact group for the new joint
 dJointGroupID ContactGroup;	//Group of contact joints for collision detection/handling.
 MyObject invis_box;
+MyObject target;
+
 
 dJointID Joint2;
 dJointID frLegJoint;
@@ -102,7 +104,8 @@ dJointID invis_box_joint;
 
 #include "Animation.h"
 
-Move_Forward anim( &mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint, 2.0, 200.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 );
+dReal startPosition[3] = { 0.0, 5.0, 20.0 };
+Animator anim(&mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint, 1.0, 100.0, 150.0, startPosition);
 
 /*
 =================================================================================
@@ -148,125 +151,6 @@ void createFixedLeg(MyObject &leg,
 #include <cmath>
 
 
-
-// true = right, false = left
-bool Decide_Right_Left( const Angel::vec4& body_orientation, const Angel::vec4& target_orientation )
-{
-	Angel::vec4 normal( 0.0f, 1.0f, 0.0f, 0.0f );
-	Angel::vec4 new_vec = Angel::cross( body_orientation, normal );
-	new_vec = normalize( new_vec );
-	new_vec.w = 0.0;
-
-	auto alpha = Angel::dot( target_orientation, new_vec );
-
-	//double alpha = target_orientation.x * new_vec.x + target_orientation.y * new_vec.y + target_orientation.z * new_vec.z;
-
-	printf( "decide = %f.5\n", alpha );
-
-	if ( alpha > 0.0 )
-	{
-		//anim.turn_right = true;
-		//anim.turn_left = false;
-
-		return true;
-	}
-	else
-	{
-		//anim.turn_right = false;
-		//anim.turn_left = true;
-
-		return false;
-	}
-}
-
-
-void change_direction( float x_target, float y_target, float z_target )
-{
-	const dReal* body_position = dGeomGetPosition( body.Geom[ 0 ]  );
-	const dReal* box_position = dGeomGetPosition( invis_box.Geom[ 0 ]  );		//Then, get the geometry position.
-
-	Angel::vec4 body_orientation( box_position[ 0 ] - body_position[ 0 ],
-						   box_position[ 1 ] - body_position[ 1 ], 
-						   box_position[ 2 ] - body_position[ 2 ],
-						   0.0f );
-	body_orientation = Angel::normalize( body_orientation );
-	body_orientation.w = 0.0;
-	Angel::vec4 target_orientation( x_target - body_position[ 0 ],
-						     y_target - body_position[ 1 ], 
-						     z_target - body_position[ 2 ],
-							 0.0f );
-	target_orientation = Angel::normalize( target_orientation );
-	target_orientation.w = 0.0;
-
-	if ( !Decide_Right_Left( body_orientation, target_orientation ) ) // true = right, false = left
-	{
-		//auto alpha = Radians_To_Degrees( std::acos( Angel::dot( target_orientation, body_orientation ) ) );
-
-		//auto beta = Angel::length( Angel::cross( target_orientation, body_orientation ) );
-		auto alpha = Radians_To_Degrees( std::asin( Angel::length( Angel::cross( target_orientation, body_orientation ) ) ) );
-
-		//printf( "alpha = %f.4\n", alpha );
-
-		if ( alpha > 4.0 || alpha < -2.0 )
-		{
-			if ( alpha > 7.0 )
-			{
-				anim.turn_right = false;
-				anim.turn_left = true;
-			}/*
-			else if ( alpha < -2.0)
-			{
-				anim.turn_left = false;
-				anim.turn_right = true;
-			}*/
-			else {
-				anim.turn_right = true;
-				anim.turn_left = false;
-			}
-
-
-			//anim.Forward();
-		}
-		else {
-				anim.turn_left = false;
-				anim.turn_right = false;
-			}
-	}
-	else
-	{
-		//auto alpha = Radians_To_Degrees( std::acos( Angel::dot( target_orientation, body_orientation ) ) );
-
-		//auto beta = Angel::length( Angel::cross( target_orientation, body_orientation ) );
-		auto alpha = Radians_To_Degrees( std::asin( Angel::length( Angel::cross( target_orientation, body_orientation ) ) ) );
-
-		//printf( "alpha = %f.4\n", alpha );
-
-		if ( alpha > 4.0 || alpha < -2.0 )
-		{
-			if ( alpha > 7.0 )
-			{
-				anim.turn_right = true;
-				anim.turn_left = false;
-			}/*
-			else if ( alpha < -2.0)
-			{
-				anim.turn_left = false;
-				anim.turn_right = true;
-			}*/
-			else {
-				anim.turn_right = false;
-				anim.turn_left = true;
-			}
-
-
-			//anim.Forward();
-		}
-		else {
-				anim.turn_left = false;
-				anim.turn_right = false;
-			}
-	}
-}
 
 
 
@@ -328,53 +212,6 @@ void createUniversalLeg(MyObject &leg,
 	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
 	
 
-}
-
-
-void createUniversalLeg_BACK(MyObject &leg,
-	MyObject &bodyAttachedTo,
-	dJointID& joint,
-	dReal xPos, dReal yPos, dReal zPos,
-	dReal xRot, dReal yRot, dReal zRot,
-	dReal radius, dReal length,
-	dReal maxAngle,	dReal minAngle,
-	dReal anchorXPos, dReal anchorYPos, dReal anchorZPos)
-{
-	dMatrix3 legOrient;
-	dRFromEulerAngles(legOrient, xRot, yRot, zRot);
-
-	//position and orientation
-	leg.Body = dBodyCreate(World);
-	dBodySetPosition(leg.Body, xPos, yPos, zPos);
-	dBodySetRotation(leg.Body, legOrient);
-	dBodySetLinearVel(leg.Body, 0, 0, 0);
-	dBodySetData(leg.Body, (void *)0);
-
-	//mass
-	dMass legMass;
-	dMassSetCapsule(&legMass, 1, 3, radius, length);
-	//dBodySetMass(leg.Body, &legMass);
-
-	//geometry
-	leg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(leg.Geom[0], leg.Body);
-
-	//universal joint
-	joint = dJointCreateUniversal(World, jointgroup);
-
-	//attach and anchor
-	dJointAttach(joint, bodyAttachedTo.Body, leg.Body);
-	dJointSetUniversalAnchor(joint, anchorXPos, anchorYPos, anchorZPos);
-
-	//axes
-	dJointSetUniversalAxis1(joint, 0, 0, 1);
-	dJointSetUniversalAxis2(joint, 0, 1, 0);
-
-	//Max and min angles
-	dJointSetUniversalParam(joint, dParamHiStop, 0.0);
-	dJointSetUniversalParam(joint, dParamLoStop, 0.0);
-	dJointSetUniversalParam(joint, dParamHiStop2, maxAngle);
-	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
 }
 
 
@@ -729,6 +566,21 @@ void initODE()
 	createMiddleLegs();
 	createBackLegs();
 
+
+	// target
+	target.Body = dBodyCreate(World);
+	dBodySetPosition(target.Body, startPosition[0], startPosition[1], startPosition[2]);
+	dRFromEulerAngles(Orient3, 0.0, 0.0, 0.0);
+	dBodySetRotation(target.Body, Orient3);
+	dBodySetLinearVel(target.Body, 0.0, 0.0, 0.0);
+	dBodySetData(target.Body, (void *)0);
+	dMass targetMass;
+	dMassSetBox(&targetMass, 1.0, 1.0, 1.0, 1.0);
+	dBodySetMass(target.Body, &targetMass);
+	target.Geom[0] = dCreateBox(Space, 2.0, 2.0, 2.0);
+	dGeomSetBody(target.Geom[0], target.Body);
+
+
 	/*Joint2 = dJointCreateFixed(World, jointgroup);
 	dJointAttach(Joint2, body.Body, 0);
 	dJointSetFixed(Joint2);*/
@@ -792,34 +644,31 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 		{
 			if ( o1 == backLeftOuterLeg.Geom[0] || o2 == backLeftOuterLeg.Geom[0] )
 			{
-				if ( anim.turn_right )
-				{
-					contacts[I].surface.mu = 20.0;
-				}
-				else
-				{
-					contacts[I].surface.mu = 0.5;
-				}
+				contacts[I].surface.mu = anim.left_leg_friction;
 			}
 			else if ( o1 == backRightOuterLeg.Geom[0] || o2 == backRightOuterLeg.Geom[0] )
 			{
-				if ( anim.turn_left )
-				{
-					contacts[I].surface.mu = 20.0;
-				}
-				else
-				{
-					contacts[I].surface.mu = 0.5;
-				}
+				contacts[I].surface.mu = anim.right_leg_friction;
 			}
 			else
 			{
-				contacts[I].surface.mu = 0.5;
+				contacts[I].surface.mu = 0.0;
 			}
 		}
 		else
 		{
 			contacts[I].surface.mu = 10.0;
+		}
+
+		if (o1 == frontLeftOuterLeg.Geom[0] && o2 == target.Geom[0] ||
+			o1 == target.Geom[0] && o2 == frontLeftOuterLeg.Geom[0] ||
+			o1 == frontRightOuterLeg.Geom[0] && o2 == target.Geom[0] ||
+			o1 == target.Geom[0] && o2 == frontRightOuterLeg.Geom[0]) {
+
+			anim.turn_left = false;
+			anim.turn_right = false;
+			anim.active = false;
+			
 		}
 
 		//contacts[I].surface.mu = 1;
@@ -844,41 +693,6 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 	}
 }
 
-/*******************************************************************************
-Function to perform the simulation loop for ODE.
-*******************************************************************************/
-void simulationLoop()
-{
-	//First, determine which geoms inside the space are potentially colliding.
-	//The nearCallBack function will be responsible for analizing those potential collisions.
-	//The second parameter indicates that no user data is being sent the callback routine.
-	dSpaceCollide( Space, 0, &nearCallBack );
-
-	//Next, advance the simulation, based on the step size given.
-	dWorldStep( World, simulationStep );
-
-	//Then, remove the temporary contact joints.
-	dJointGroupEmpty( ContactGroup );
-
-
-	/*printf( "%f.4", Radians_To_Degrees( dJointGetUniversalAngle1( mlLegJoint ) ) );
-	printf( "\t\t%f.4\n", Radians_To_Degrees( dJointGetUniversalAngle2( mlLegJoint ) ) );*/
-
-	if ( anim.active )
-	{
-		change_direction( -20.0, 5.0, 20.0 );
-
-		anim.Forward();
-	}
-
-
-
-	//printf( "%f.4, %f.4, %f.4\n", dGeomGetPosition( invis_box.Geom[ 0 ] )[ 0 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 1 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 2 ] );
-
-
-
-	//At this point, all geometries have been updated, so they can be drawn from display().
-}
 
 /*******************************************************************************
 Function to transform an ODE orientation matrix into an OpenGL transformation
@@ -887,26 +701,26 @@ p -> a vector of three elements.
 R -> the rotation matrix, in row vector format, with 12 elements.
 M -> the resulting matrix, in vector format, with 16 elements.
 *******************************************************************************/
-void ODEToOpenGLMatrix( const dReal* p, const dReal* R, dReal* M)
+void ODEToOpenGLMatrix(const dReal* p, const dReal* R, dReal* M)
 {
-	M[0]  = R[0]; M[1]  = R[4]; M[2]  = R[8];  M[3]  = 0;
-    M[4]  = R[1]; M[5]  = R[5]; M[6]  = R[9];  M[7]  = 0;
-    M[8]  = R[2]; M[9]  = R[6]; M[10] = R[10]; M[11] = 0;
-    M[12] = p[0]; M[13] = p[1]; M[14] = p[2];  M[15] = 1;
+	M[0] = R[0]; M[1] = R[4]; M[2] = R[8];  M[3] = 0;
+	M[4] = R[1]; M[5] = R[5]; M[6] = R[9];  M[7] = 0;
+	M[8] = R[2]; M[9] = R[6]; M[10] = R[10]; M[11] = 0;
+	M[12] = p[0]; M[13] = p[1]; M[14] = p[2];  M[15] = 1;
 }
 
 /*******************************************************************************
 Function to render a box, given it sides length, position and orientation.
 *******************************************************************************/
-void renderBox( const dReal sides[3], const dReal position[3], const dReal orientation[12] )
+void renderBox(const dReal sides[3], const dReal position[3], const dReal orientation[12])
 {
 	glPushMatrix();					//Save current ModelView.
-	
+
 	dReal Matrix[16];				//The OpenGL version of the transformation matrix.
-	ODEToOpenGLMatrix( position, orientation, Matrix );
-	glMultMatrixd( Matrix );
-	glScaled( sides[0], sides[1], sides[2] );	//Scale to have the right measure in sides.
-	GDrawing::setColor( 0.5, 0.6, 0.7 );
+	ODEToOpenGLMatrix(position, orientation, Matrix);
+	glMultMatrixd(Matrix);
+	glScaled(sides[0], sides[1], sides[2]);	//Scale to have the right measure in sides.
+	GDrawing::setColor(0.5, 0.6, 0.7);
 	GDrawing::drawCube();
 
 	glPopMatrix();					//Restore ModelView.
@@ -923,7 +737,7 @@ void renderCylinder(const dReal radius, const dReal length, const dReal position
 	glMultMatrixd(Matrix);
 	glTranslated(0, 0, -length / 2);
 	glScaled(radius, radius, length);	//Scale to have the right measure in sides.
-	
+
 	GDrawing::setColor(0.5, 0.6, 0.7);
 	GDrawing::drawCylinder();
 
@@ -964,6 +778,51 @@ void renderCapsule(const dReal radius, const dReal length, const dReal position[
 
 
 
+}
+
+
+/*******************************************************************************
+Function to perform the simulation loop for ODE.
+*******************************************************************************/
+void simulationLoop()
+{
+	//First, determine which geoms inside the space are potentially colliding.
+	//The nearCallBack function will be responsible for analizing those potential collisions.
+	//The second parameter indicates that no user data is being sent the callback routine.
+	dSpaceCollide( Space, 0, &nearCallBack );
+
+	//Next, advance the simulation, based on the step size given.
+	dWorldStep( World, simulationStep );
+
+	//Then, remove the temporary contact joints.
+	dJointGroupEmpty( ContactGroup );
+
+
+	/*printf( "%f.4", Radians_To_Degrees( dJointGetUniversalAngle1( mlLegJoint ) ) );
+	printf( "\t\t%f.4\n", Radians_To_Degrees( dJointGetUniversalAngle2( mlLegJoint ) ) );*/
+
+	if ( anim.active )
+	{
+		dMatrix3 orient;
+		dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
+		//if ( anim.seek ) anim.changeDirection(startPosition);
+		
+		const dReal sides[3] = { 1, 1, 1 };
+		
+		//renderBox(sides, startPosition, orient );
+
+		//anim.Forward();
+		
+		anim.Move();
+	}
+
+
+
+	//printf( "%f.4, %f.4, %f.4\n", dGeomGetPosition( invis_box.Geom[ 0 ] )[ 0 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 1 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 2 ] );
+
+
+
+	//At this point, all geometries have been updated, so they can be drawn from display().
 }
 
 /*******************************************************************************
@@ -1091,7 +950,6 @@ void myKey(unsigned char key, int x, int y)
 			break;
 		case '1':
 			anim.active = !anim.active;
-			anim.reverse = !anim.reverse;
 			break;
 		case '2':
 			//anim.active = !anim.active;
@@ -1225,6 +1083,12 @@ void display(void)
 	drawGeom(flLeg.Geom[0]);
 	drawGeom(frontLeftOuterLeg.Geom[0]);
 
+	/*dMatrix3 orient;
+	dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
+	const dReal sides[3] = { 1, 1, 1 };
+	renderBox(sides, startPosition, orient);*/
+	drawGeom(target.Geom[0]);
+
 	glPushMatrix();						//Draw the collision plane.
 	glTranslated( 0.0, -0.05, 0.0 );
 	glScaled( 100.0, 0.1, 100.0 );
@@ -1258,7 +1122,7 @@ void myReshape(int w, int h)
 	// This defines the field of view of the camera.
     // Making the first 4 parameters larger will give a larger field of 
 	// view, therefore making the objects in the scene appear smaller.
-	glOrtho(-asp*15, asp*15, -15, 15, -500,500);
+	glOrtho(-asp*15, asp*15, -15, 15, -500, 2000);
 
 	// Use either of the following functions to set up a perspective view
 	//gluPerspective(20,(float) w/(float) h,1,100) ;

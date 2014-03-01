@@ -4,222 +4,212 @@
 #include <ode/ode.h>
 #include <chrono>
 #include <cmath>
-#include "angular_measure.h"
+#include "angle_conversions.h"
+#include "vec.h"
 
-struct Move_Forward {
+struct Animator {
 	bool active;
-	bool reverse;
+	
 	bool turn_right;
 	bool turn_left;
-	bool skip_timer;
+	
+	dReal right_leg_friction;
+	dReal left_leg_friction;
 
-	Move_Forward( dJointID* right, dJointID* left,
+	dReal position[3];
+	dReal max_vert_force;
+	dReal max_horiz_force;
+	Animator(dJointID* right, dJointID* left,
 				  dJointID* back_right, dJointID* back_left,
-				  double speed,
-				  long long time_gap,
-				  dReal left_velocity1_down,  dReal left_velocity2_down,
-				  dReal right_velocity1_down, dReal right_velocity2_down,
-				  dReal left_velocity1_up,    dReal left_velocity2_up,
-				  dReal right_velocity1_up,   dReal right_velocity2_up )
-												 : active( false ), reverse( false ), turn_right( false ), turn_left( false ), skip_timer( false ),
+				  double speed, 
+				  dReal max_vert_force, dReal max_horiz_force,
+				  dReal position[3])
+												  : active(false), turn_right(false), turn_left(false),
+												  right_leg_friction(0.0), left_leg_friction(0.0),
 												   speed( speed ),
-												   time_gap( time_gap ),
+												   max_vert_force(max_vert_force), max_horiz_force(max_horiz_force ),
 												   right_leg( right ), left_leg( left ),
 												   back_left( back_left ), back_right( back_right ),
-												   left_velocity1_down( left_velocity1_down ), left_velocity2_down( left_velocity2_down ),
-												   right_velocity1_down( right_velocity1_down ), right_velocity2_down( right_velocity2_down ),
-												   left_velocity1_up( left_velocity1_up ), left_velocity2_up( left_velocity2_up ),
-												   right_velocity1_up( right_velocity1_up ), right_velocity2_up( right_velocity2_up ),
 												   previous_angle_at_dir_change( 0.0 ), first_time( true )
 	{
+		this->position[0] = position[0];
+		this->position[1] = position[1];
+		this->position[2] = position[2];
 	}
 
-	void Forward( void )
+	void moveDown( void )
 	{
-		static double prev_vertical_rot_angle = 0.0;
+		dJointSetUniversalParam(*left_leg, dParamVel, speed);
+		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*left_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
 
-		auto alpha = Radians_To_Degrees( dJointGetUniversalAngle2( *right_leg ) );
-		auto angle_change = std::abs( alpha - previous_angle_at_dir_change );
+		dJointSetUniversalParam(*right_leg, dParamVel, -speed);
+		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*right_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+	}
 
-		//printf( "%f.6\n", angle_change );
+	void moveUp( void )
+	{
+		dJointSetUniversalParam(*left_leg, dParamVel, -speed);
+		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*left_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
 
-		double temp_threshold = 80.0;
+		dJointSetUniversalParam(*right_leg, dParamVel, speed);
+		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*right_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+	}
 
-		if ( first_time ) temp_threshold = 40.0;
+	void moveBack( void )
+	{
+		dJointSetUniversalParam(*left_leg, dParamVel, 0);
+		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*left_leg, dParamVel2, speed);
+		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
 
-		if ( angle_change > temp_threshold )
+		dJointSetUniversalParam(*right_leg, dParamVel, 0);
+		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*right_leg, dParamVel2, -speed);
+		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+	}
+
+	void moveForward( void )
+	{
+		dJointSetUniversalParam(*left_leg, dParamVel, 0);
+		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*left_leg, dParamVel2, -speed);
+		dJointSetUniversalParam(*left_leg, dParamFMax2, 100);
+
+		dJointSetUniversalParam(*right_leg, dParamVel, 0);
+		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*right_leg, dParamVel2, speed);
+		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+	}
+
+	void Move( void )
+	{
+		auto current_h_angle = Radians_To_Degrees( dJointGetUniversalAngle2( *right_leg ) );
+		auto current_v_angle = Radians_To_Degrees( dJointGetUniversalAngle1( *left_leg ) );
+
+
+		static double target_h_angle = 25.0;
+		static double target_v_angle = -1.8;
+
+		static bool first_time = true;
+		static bool forward = true;
+
+		if ( first_time ) moveForward();
+
+		// once legs reached forward target angle
+		if ( forward && current_h_angle > target_h_angle )
 		{
-			previous_angle_at_dir_change = alpha;
-
-			skip_timer = true;
-			reverse = !reverse;
-		}
-		else if ( !skip_timer && std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::high_resolution_clock::now() - prev_time_point ).count() < time_gap )
-		{
-			return;
-		}
-
-		if ( skip_timer )
-		{
-			skip_timer = false;
-		}
-
-		if ( reverse )
-		{
-			if ( Radians_To_Degrees( dJointGetUniversalAngle1( *left_leg ) ) < -6.0 )
+			// once legs reached ground, move back
+			if ( current_v_angle > target_v_angle )
 			{
-				dJointSetUniversalParam(*left_leg, dParamVel, speed);
-				dJointSetUniversalParam(*left_leg, dParamFMax, 100.0);
-				dJointSetUniversalParam(*left_leg, dParamVel2, 0.0);
-				dJointSetUniversalParam(*left_leg, dParamFMax2, 100.0);
-
-				dJointSetUniversalParam(*right_leg, dParamVel, -speed);
-				dJointSetUniversalParam(*right_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*right_leg, dParamVel2, 0);
-				dJointSetUniversalParam(*right_leg, dParamFMax2, 100);
+				decideDirection();
+				moveBack();
+				first_time = false;
+				forward = false;
+				target_h_angle = -target_h_angle;
 			}
 			else
 			{
-				dJointSetUniversalParam(*left_leg, dParamVel, 0);
-				dJointSetUniversalParam(*left_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*left_leg, dParamVel2, speed);
-				dJointSetUniversalParam(*left_leg, dParamFMax2, 100);
-
-				dJointSetUniversalParam(*right_leg, dParamVel, 0);
-				dJointSetUniversalParam(*right_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*right_leg, dParamVel2, -speed);
-				dJointSetUniversalParam(*right_leg, dParamFMax2, 100);
+				moveDown();
 			}
 		}
-		else
-		{			
-			if ( Radians_To_Degrees( dJointGetUniversalAngle1( *left_leg ) ) > -6.0 )
+		else if ( !forward && current_h_angle < target_h_angle )
+		{
+			// as soon as legs are above the ground, move forward
+			if ( current_v_angle < target_v_angle )
 			{
-				dJointSetUniversalParam(*left_leg, dParamVel, -speed);
-				dJointSetUniversalParam(*left_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*left_leg, dParamVel2, 0);
-				dJointSetUniversalParam(*left_leg, dParamFMax2, 100);
 
-				dJointSetUniversalParam(*right_leg, dParamVel, speed);
-				dJointSetUniversalParam(*right_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*right_leg, dParamVel2, 0);
-				dJointSetUniversalParam(*right_leg, dParamFMax2, 100);
+				moveForward();
+				forward = true;
+				target_h_angle = -target_h_angle;
 			}
 			else
 			{
-				dJointSetUniversalParam(*left_leg, dParamVel, 0);
-				dJointSetUniversalParam(*left_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*left_leg, dParamVel2, -speed);
-				dJointSetUniversalParam(*left_leg, dParamFMax2, 100);
-
-				dJointSetUniversalParam(*right_leg, dParamVel, 0);
-				dJointSetUniversalParam(*right_leg, dParamFMax, 100);
-				dJointSetUniversalParam(*right_leg, dParamVel2, speed);
-				dJointSetUniversalParam(*right_leg, dParamFMax2, 100);
+				moveUp();
 			}
 		}
-
-		prev_time_point = std::chrono::high_resolution_clock::now();
 	}
 	
 
-	//---------------------------------------------
 
-	dReal Get_Left_velocity1_Down( void ) const
+
+
+
+
+	// true = right, false = left
+	void decideDirection(void)
 	{
-		return left_velocity1_down;
+		double x_target = position[0];
+		double y_target = position[1];
+		double z_target = position[2];
+
+		const dReal* body_position = dGeomGetPosition(body.Geom[0]);
+		const dReal* box_position = dGeomGetPosition(invis_box.Geom[0]);		//Then, get the geometry position.
+
+		Angel::vec4 body_orientation(box_position[0] - body_position[0],
+			box_position[1] - body_position[1],
+			box_position[2] - body_position[2],
+			0.0f);
+		body_orientation = Angel::normalize(body_orientation);
+		body_orientation.w = 0.0;
+		Angel::vec4 target_orientation(x_target - body_position[0],
+			y_target - body_position[1],
+			z_target - body_position[2],
+			0.0f);
+		target_orientation = Angel::normalize(target_orientation);
+		target_orientation.w = 0.0;
+
+		Angel::vec4 normal(0.0f, 1.0f, 0.0f, 0.0f);
+		Angel::vec4 normal_to_body_orientation = Angel::cross(body_orientation, normal);
+		normal_to_body_orientation = normalize(normal_to_body_orientation);
+		normal_to_body_orientation.w = 0.0;
+		
+		// Beta = angle between normal_to_body_orientation and target_orientation
+		auto cosBeta = Angel::dot(target_orientation, normal_to_body_orientation);
+		auto absCosBeta = std::abs(cosBeta);
+		auto beta = Radians_To_Degrees( std::acos(cosBeta) );
+		
+		// Alpha = angle between body_orientation and target_orientation
+		auto cosAlpha = Angel::dot(target_orientation, body_orientation);
+		if (cosAlpha < 0) 
+		{
+			absCosBeta = 1 - absCosBeta;
+		}
+		auto frictionScale = std::fmax(absCosBeta, 0.1f);
+		
+		
+	
+
+		/*if (90.0 - beta < 5.0)
+		{
+			left_leg_friction = 0.0;
+			right_leg_friction = 0.0;
+		}*/
+		if (cosBeta >= 0.0)
+		{
+			right_leg_friction = 0.0;
+			left_leg_friction = frictionScale * 20.0;
+		}
+		else if (cosBeta < 0.0)
+		{
+			right_leg_friction = frictionScale * 20.0;
+			left_leg_friction = 0.0;
+		}
+		
+		printf("cosine = %f.5\n", cosBeta);
+		printf("angle  = %f.5\n\n", beta);
+		printf("frictionScale = %f.5\n", frictionScale);
+		printf("left leg friction = %f.5\n", left_leg_friction);
+		printf("rightq leg friction = %f.5\n\n", right_leg_friction);
 	}
 
-	void Set_Left_velocity1_Down( dReal velocity )
-	{
-		left_velocity1_down = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Left_velocity2_Down( void ) const
-	{
-		return left_velocity2_down;
-	}
-
-	void Set_Left_velocity2_Down( dReal velocity )
-	{
-		left_velocity2_down = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Left_velocity1_Up( void ) const
-	{
-		return left_velocity1_up;
-	}
-
-	void Set_Left_velocity1_Up( dReal velocity )
-	{
-		left_velocity1_up = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Left_velocity2_Up( void ) const
-	{
-		return left_velocity2_up;
-	}
-
-	void Set_Left_velocity2_Up( dReal velocity )
-	{
-		left_velocity2_up = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Right_velocity1_Down( void ) const
-	{
-		return right_velocity1_down;
-	}
-
-	void Set_Right_velocity1_Down( dReal velocity )
-	{
-		right_velocity1_down = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Right_velocity2_Down( void ) const
-	{
-		return right_velocity2_down;
-	}
-
-	void Set_Right_velocity2_Down( dReal velocity )
-	{
-		right_velocity2_down = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Right_velocity1_Up( void ) const
-	{
-		return right_velocity1_up;
-	}
-
-	void Set_Right_velocity1_Up( dReal velocity )
-	{
-		right_velocity1_up = velocity;
-	}
-
-	//---------------------------------------------
-
-	dReal Get_Right_velocity2_Up( void ) const
-	{
-		return right_velocity2_up;
-	}
-
-	void Set_Right_velocity2_Up( dReal velocity )
-	{
-		right_velocity2_up = velocity;
-	}
-
-	//---------------------------------------------
 
 private:
 
@@ -232,23 +222,10 @@ private:
 	dJointID* back_left;
 
 	double  speed;
-	__int64 time_gap;
-
-	dReal left_velocity1_down;
-	dReal left_velocity2_down;
-
-	dReal right_velocity1_down;
-	dReal right_velocity2_down;
-
-	dReal left_velocity1_up;
-	dReal left_velocity2_up;
-
-	dReal right_velocity1_up;
-	dReal right_velocity2_up;
-
-	std::chrono::high_resolution_clock::time_point prev_time_point;
 
 	dReal previous_angle_at_dir_change;
+
+	
 };
 
 
