@@ -6,6 +6,8 @@
 #include <cmath>
 #include "angle_conversions.h"
 #include "vec.h"
+#include "FoodParticle.h"
+#include <algorithm>
 
 struct Animator {
 	bool active;
@@ -16,14 +18,19 @@ struct Animator {
 	dReal right_leg_friction;
 	dReal left_leg_friction;
 
-	dReal position[3];
+	dReal target_position[3];
 	dReal max_vert_force;
 	dReal max_horiz_force;
+	
+	vector<FoodParticle> knownFoodParticles;
+	vector<dReal> knownFoodParticleScores;
+
+	int ndxOfFoodParticleSought;
+
 	Animator(dJointID* right, dJointID* left,
 				  dJointID* back_right, dJointID* back_left,
 				  double speed, 
-				  dReal max_vert_force, dReal max_horiz_force,
-				  dReal position[3])
+				  dReal max_vert_force, dReal max_horiz_force)
 												  : active(false), turn_right(false), turn_left(false),
 												  right_leg_friction(0.0), left_leg_friction(0.0),
 												   speed( speed ),
@@ -32,9 +39,76 @@ struct Animator {
 												   back_left( back_left ), back_right( back_right ),
 												   previous_angle_at_dir_change( 0.0 ), first_time( true )
 	{
-		this->position[0] = position[0];
-		this->position[1] = position[1];
-		this->position[2] = position[2];
+	}
+
+	int getIndexOfFoodParticleSought()
+	{
+		return ndxOfFoodParticleSought;
+	}
+	
+	dReal findEuclideanDistance(const dReal position1[3], const dReal position2[3])
+	{
+		dReal xComponent = pow(position2[0] - position1[0], 2);
+		dReal yComponent = pow(position2[1] - position1[1], 2);
+		dReal zComponent = pow(position2[2] - position1[2], 2);
+
+		return pow(xComponent + yComponent + zComponent, 0.5);
+	}
+
+	void addKnownFoodParticle(FoodParticle food_particle) {
+		knownFoodParticles.push_back(food_particle);
+		knownFoodParticleScores.push_back(getFoodParticleScore(food_particle));
+
+	}
+
+	dReal getFoodParticleScore(FoodParticle foodParticle)
+	{
+		const dReal* head_position = dGeomGetPosition(invis_box.Geom);
+		const dReal* food_position = dGeomGetPosition(foodParticle.odeObject.Geom);
+		return foodParticle.prize - findEuclideanDistance(head_position, food_position);
+	}
+
+	void updateFoodParticleScores()
+	{
+		for (auto i = 0; i < knownFoodParticles.size(); ++i)
+		{
+			const dReal* head_position = dGeomGetPosition(invis_box.Geom);
+			const dReal* food_position = dGeomGetPosition(knownFoodParticles[i].odeObject.Geom);
+			knownFoodParticleScores[i] = getFoodParticleScore(knownFoodParticles[i]);
+
+		}
+	}
+
+	void removeSoughtFoodParticle()
+	{
+		knownFoodParticles.erase(knownFoodParticles.begin() + ndxOfFoodParticleSought);
+		knownFoodParticleScores.erase(knownFoodParticleScores.begin() + ndxOfFoodParticleSought);
+		ndxOfFoodParticleSought = -1;
+	}
+	
+	void seekFoodParticleWithHighestScore()
+	{
+		
+		updateFoodParticleScores();
+
+		dReal maxScore = 0;
+		int maxI = -1;
+		for (auto i = 0; i < knownFoodParticleScores.size(); ++i)
+		{
+			if (knownFoodParticleScores[i] > maxScore)
+			{
+				maxScore = knownFoodParticleScores[i];
+				maxI = i;
+			}
+		}
+
+		ndxOfFoodParticleSought = maxI;
+		const dReal* food_position = dGeomGetPosition(knownFoodParticles[maxI].odeObject.Geom);
+		target_position[0] = food_position[0];
+		target_position[1] = food_position[1];
+		target_position[2] = food_position[2];
+
+
 	}
 
 	void moveDown( void )
@@ -81,7 +155,7 @@ struct Animator {
 		dJointSetUniversalParam(*left_leg, dParamVel, 0);
 		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
 		dJointSetUniversalParam(*left_leg, dParamVel2, -speed);
-		dJointSetUniversalParam(*left_leg, dParamFMax2, 100);
+		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
 
 		dJointSetUniversalParam(*right_leg, dParamVel, 0);
 		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
@@ -103,10 +177,10 @@ struct Animator {
 
 		if ( first_time ) moveForward();
 
-		// once legs reached forward target angle
+		// once legs reach forward target angle
 		if ( forward && current_h_angle > target_h_angle )
 		{
-			// once legs reached ground, move back
+			// once legs reach ground, move back
 			if ( current_v_angle > target_v_angle )
 			{
 				decideDirection();
@@ -120,12 +194,12 @@ struct Animator {
 				moveDown();
 			}
 		}
+		//legs have reached backward target angle
 		else if ( !forward && current_h_angle < target_h_angle )
 		{
 			// as soon as legs are above the ground, move forward
 			if ( current_v_angle < target_v_angle )
 			{
-
 				moveForward();
 				forward = true;
 				target_h_angle = -target_h_angle;
@@ -146,12 +220,12 @@ struct Animator {
 	// true = right, false = left
 	void decideDirection(void)
 	{
-		double x_target = position[0];
-		double y_target = position[1];
-		double z_target = position[2];
+		double x_target = target_position[0];
+		double y_target = target_position[1];
+		double z_target = target_position[2];
 
-		const dReal* body_position = dGeomGetPosition(body.Geom[0]);
-		const dReal* box_position = dGeomGetPosition(invis_box.Geom[0]);		//Then, get the geometry position.
+		const dReal* body_position = dGeomGetPosition(body.Geom);
+		const dReal* box_position = dGeomGetPosition(invis_box.Geom);		//Then, get the geometry position.
 
 		Angel::vec4 body_orientation(box_position[0] - body_position[0],
 			box_position[1] - body_position[1],
@@ -182,11 +256,8 @@ struct Animator {
 		{
 			absCosBeta = 1 - absCosBeta;
 		}
-		auto frictionScale = std::fmax(absCosBeta, 0.1f);
+		auto frictionScale = std::fmax(absCosBeta, 0.2f);
 		
-		
-	
-
 		/*if (90.0 - beta < 5.0)
 		{
 			left_leg_friction = 0.0;
@@ -195,11 +266,11 @@ struct Animator {
 		if (cosBeta >= 0.0)
 		{
 			right_leg_friction = 0.0;
-			left_leg_friction = frictionScale * 20.0;
+			left_leg_friction = frictionScale * 30.0;
 		}
 		else if (cosBeta < 0.0)
 		{
-			right_leg_friction = frictionScale * 20.0;
+			right_leg_friction = frictionScale * 30.0;
 			left_leg_friction = 0.0;
 		}
 		
