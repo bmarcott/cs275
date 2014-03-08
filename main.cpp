@@ -1,3 +1,4 @@
+
 /*******************************************************************************
 Basic Example for ODE Usage
 *******************************************************************************/
@@ -12,10 +13,14 @@ Basic Example for ODE Usage
 #include <gl/glu.h>
 #include "GL/glut.h"
 
+
 #include <math.h>
 #include <iostream>
+#include <vector>
 
-#include "angular_measure.h"
+#include "angle_conversions.h"
+#include "ODEObject.h"
+#include "FoodParticle.h"
 
 using namespace std;
 
@@ -23,6 +28,9 @@ using namespace std;
 #include "FrameSaver.h"
 #include "Timer.h"
 #include "GDrawing.h"
+
+#include <random>
+	
 
 ///////////////////////////  OpenGL global variables ///////////////////////////
 FrameSaver g_frameSaver;
@@ -48,9 +56,10 @@ typedef char STR[STRLEN];
 #define X 0
 #define Y 1
 #define Z 2
+#define FOOD_COUNT 4
 
 // The eye point and look-at point.
-double g_eye[3] = {0.0, 100.0, 50.0};
+double g_eye[3] = {0.0, 500.0, 10.0};
 double g_ref[3] = {0.0, 0.0, 0.0};
 double g_time = 0.0 ;
 ////////////////////////////////////////////////////////////////////////////////
@@ -58,32 +67,37 @@ double g_time = 0.0 ;
 /////////////////////////// ODE Global Variables ///////////////////////////////
 dReal simulationTime = 0.0;
 dReal simulationStep = 0.01;
-struct MyObject
-{
-	dBodyID Body;		//The dynamics body.
-	dGeomID Geom[1];	//Geometries representing this body.
-};
 
-MyObject Object;			//The rigid body (a box).
-MyObject Rod;
-MyObject body;				//Insect Body
-MyObject frLeg;
-MyObject frontRightOuterLeg;
-MyObject flLeg;
-MyObject frontLeftOuterLeg;
-MyObject middleRightLeg;
-MyObject middleRightOuterLeg;
-MyObject middleLeftLeg;
-MyObject middleLeftOuterLeg;
-MyObject brLeg;
-MyObject backRightOuterLeg;
-MyObject blLeg;
-MyObject backLeftOuterLeg;
+//struct ODEObject
+//{
+//	dBodyID Body;		//The dynamics body.
+//	dGeomID Geom;	//Geometries representing this body.
+//};
+
+
+
+ODEObject Object;			//The rigid body (a box).
+ODEObject Rod;
+ODEObject body;				//Insect Body
+ODEObject frLeg;
+ODEObject frontRightOuterLeg;
+ODEObject flLeg;
+ODEObject frontLeftOuterLeg;
+ODEObject middleRightLeg;
+ODEObject middleRightOuterLeg;
+ODEObject middleLeftLeg;
+ODEObject middleLeftOuterLeg;
+ODEObject brLeg;
+ODEObject backRightOuterLeg;
+ODEObject blLeg;
+ODEObject backLeftOuterLeg;
 dWorldID World;				//Dynamics world.
 dSpaceID Space;				//A space that defines collisions.
 dJointGroupID jointgroup;   // contact group for the new joint
 dJointGroupID ContactGroup;	//Group of contact joints for collision detection/handling.
-MyObject invis_box;
+ODEObject invis_box;
+ODEObject target;
+
 
 dJointID Joint2;
 dJointID frLegJoint;
@@ -100,9 +114,19 @@ dJointID blLegJoint;
 dJointID bloLegJoint;
 dJointID invis_box_joint;
 
+std::mt19937 rng_engine;
+
+
+//*******WARNING**********
+//must be same order as food particle vector in Animation.h!!!
+//vector<FoodParticle> foodParticles;
+//*******WARNING**********
+vector<ODEObject> objectsToDestroy;
+
 #include "Animation.h"
 
-Move_Forward anim( &mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint, 2.0, 200.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 );
+Animator anim(&mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint, 1.0, 100.0, 1000.0);
+
 
 /*
 =================================================================================
@@ -111,8 +135,8 @@ createFixedLeg
 	Use parameters to create leg body/geom and attach to body with fixed joint
 =================================================================================
 */
-void createFixedLeg(MyObject &leg,
-	MyObject &bodyAttachedTo,
+void createFixedLeg(ODEObject &leg,
+	ODEObject &bodyAttachedTo,
 	dJointID& joint,
 	dReal xPos, dReal yPos, dReal zPos,
 	dReal xRot, dReal yRot, dReal zRot,
@@ -135,8 +159,8 @@ void createFixedLeg(MyObject &leg,
 	dBodySetMass(leg.Body, &legMass);
 
 	//geometry
-	leg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(leg.Geom[0], leg.Body);
+	leg.Geom = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(leg.Geom, leg.Body);
 
 	//fixed joint
 	joint = dJointCreateFixed(World, jointgroup);
@@ -148,125 +172,6 @@ void createFixedLeg(MyObject &leg,
 #include <cmath>
 
 
-
-// true = right, false = left
-bool Decide_Right_Left( const Angel::vec4& body_orientation, const Angel::vec4& target_orientation )
-{
-	Angel::vec4 normal( 0.0f, 1.0f, 0.0f, 0.0f );
-	Angel::vec4 new_vec = Angel::cross( body_orientation, normal );
-	new_vec = normalize( new_vec );
-	new_vec.w = 0.0;
-
-	auto alpha = Angel::dot( target_orientation, new_vec );
-
-	//double alpha = target_orientation.x * new_vec.x + target_orientation.y * new_vec.y + target_orientation.z * new_vec.z;
-
-	printf( "decide = %f.5\n", alpha );
-
-	if ( alpha > 0.0 )
-	{
-		//anim.turn_right = true;
-		//anim.turn_left = false;
-
-		return true;
-	}
-	else
-	{
-		//anim.turn_right = false;
-		//anim.turn_left = true;
-
-		return false;
-	}
-}
-
-
-void change_direction( float x_target, float y_target, float z_target )
-{
-	const dReal* body_position = dGeomGetPosition( body.Geom[ 0 ]  );
-	const dReal* box_position = dGeomGetPosition( invis_box.Geom[ 0 ]  );		//Then, get the geometry position.
-
-	Angel::vec4 body_orientation( box_position[ 0 ] - body_position[ 0 ],
-						   box_position[ 1 ] - body_position[ 1 ], 
-						   box_position[ 2 ] - body_position[ 2 ],
-						   0.0f );
-	body_orientation = Angel::normalize( body_orientation );
-	body_orientation.w = 0.0;
-	Angel::vec4 target_orientation( x_target - body_position[ 0 ],
-						     y_target - body_position[ 1 ], 
-						     z_target - body_position[ 2 ],
-							 0.0f );
-	target_orientation = Angel::normalize( target_orientation );
-	target_orientation.w = 0.0;
-
-	if ( !Decide_Right_Left( body_orientation, target_orientation ) ) // true = right, false = left
-	{
-		//auto alpha = Radians_To_Degrees( std::acos( Angel::dot( target_orientation, body_orientation ) ) );
-
-		//auto beta = Angel::length( Angel::cross( target_orientation, body_orientation ) );
-		auto alpha = Radians_To_Degrees( std::asin( Angel::length( Angel::cross( target_orientation, body_orientation ) ) ) );
-
-		//printf( "alpha = %f.4\n", alpha );
-
-		if ( alpha > 4.0 || alpha < -2.0 )
-		{
-			if ( alpha > 7.0 )
-			{
-				anim.turn_right = false;
-				anim.turn_left = true;
-			}/*
-			else if ( alpha < -2.0)
-			{
-				anim.turn_left = false;
-				anim.turn_right = true;
-			}*/
-			else {
-				anim.turn_right = true;
-				anim.turn_left = false;
-			}
-
-
-			//anim.Forward();
-		}
-		else {
-				anim.turn_left = false;
-				anim.turn_right = false;
-			}
-	}
-	else
-	{
-		//auto alpha = Radians_To_Degrees( std::acos( Angel::dot( target_orientation, body_orientation ) ) );
-
-		//auto beta = Angel::length( Angel::cross( target_orientation, body_orientation ) );
-		auto alpha = Radians_To_Degrees( std::asin( Angel::length( Angel::cross( target_orientation, body_orientation ) ) ) );
-
-		//printf( "alpha = %f.4\n", alpha );
-
-		if ( alpha > 4.0 || alpha < -2.0 )
-		{
-			if ( alpha > 7.0 )
-			{
-				anim.turn_right = true;
-				anim.turn_left = false;
-			}/*
-			else if ( alpha < -2.0)
-			{
-				anim.turn_left = false;
-				anim.turn_right = true;
-			}*/
-			else {
-				anim.turn_right = false;
-				anim.turn_left = true;
-			}
-
-
-			//anim.Forward();
-		}
-		else {
-				anim.turn_left = false;
-				anim.turn_right = false;
-			}
-	}
-}
 
 
 
@@ -282,8 +187,8 @@ Use parameters to create leg body/geom and attach to body with universal joint
 mass is not set
 =================================================================================
 */
-void createUniversalLeg(MyObject &leg,
-	MyObject &bodyAttachedTo,
+void createUniversalLeg(ODEObject &leg,
+	ODEObject &bodyAttachedTo,
 	dJointID& joint,
 	dReal xPos, dReal yPos, dReal zPos,
 	dReal xRot, dReal yRot, dReal zRot,
@@ -307,8 +212,8 @@ void createUniversalLeg(MyObject &leg,
 	//dBodySetMass(leg.Body, &legMass);
 
 	//geometry
-	leg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(leg.Geom[0], leg.Body);
+	leg.Geom = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(leg.Geom, leg.Body);
 
 	//universal joint
 	joint = dJointCreateUniversal(World, jointgroup);
@@ -331,53 +236,6 @@ void createUniversalLeg(MyObject &leg,
 }
 
 
-void createUniversalLeg_BACK(MyObject &leg,
-	MyObject &bodyAttachedTo,
-	dJointID& joint,
-	dReal xPos, dReal yPos, dReal zPos,
-	dReal xRot, dReal yRot, dReal zRot,
-	dReal radius, dReal length,
-	dReal maxAngle,	dReal minAngle,
-	dReal anchorXPos, dReal anchorYPos, dReal anchorZPos)
-{
-	dMatrix3 legOrient;
-	dRFromEulerAngles(legOrient, xRot, yRot, zRot);
-
-	//position and orientation
-	leg.Body = dBodyCreate(World);
-	dBodySetPosition(leg.Body, xPos, yPos, zPos);
-	dBodySetRotation(leg.Body, legOrient);
-	dBodySetLinearVel(leg.Body, 0, 0, 0);
-	dBodySetData(leg.Body, (void *)0);
-
-	//mass
-	dMass legMass;
-	dMassSetCapsule(&legMass, 1, 3, radius, length);
-	//dBodySetMass(leg.Body, &legMass);
-
-	//geometry
-	leg.Geom[0] = dCreateCapsule(Space, radius, length);
-	dGeomSetBody(leg.Geom[0], leg.Body);
-
-	//universal joint
-	joint = dJointCreateUniversal(World, jointgroup);
-
-	//attach and anchor
-	dJointAttach(joint, bodyAttachedTo.Body, leg.Body);
-	dJointSetUniversalAnchor(joint, anchorXPos, anchorYPos, anchorZPos);
-
-	//axes
-	dJointSetUniversalAxis1(joint, 0, 0, 1);
-	dJointSetUniversalAxis2(joint, 0, 1, 0);
-
-	//Max and min angles
-	dJointSetUniversalParam(joint, dParamHiStop, 0.0);
-	dJointSetUniversalParam(joint, dParamLoStop, 0.0);
-	dJointSetUniversalParam(joint, dParamHiStop2, maxAngle);
-	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
-}
-
-
 /*
 =================================================================================
 createUniversalLeg
@@ -388,7 +246,7 @@ Use parameters to create leg body/geom and attach to body with universal joint
 mass is not set
 =================================================================================
 */
-void createUniversalSquareLeg(MyObject &leg,
+void createUniversalSquareLeg(ODEObject &leg,
 	dJointID& joint,
 	dReal xPos, dReal yPos, dReal zPos,
 	dReal xRot, dReal yRot, dReal zRot,
@@ -412,8 +270,8 @@ void createUniversalSquareLeg(MyObject &leg,
 	dBodySetMass(leg.Body, &legMass);
 
 	//geometry
-	leg.Geom[0] = dCreateBox(Space, sides[0], sides[1], sides[2]);
-	dGeomSetBody(leg.Geom[0], leg.Body);
+	leg.Geom = dCreateBox(Space, sides[0], sides[1], sides[2]);
+	dGeomSetBody(leg.Geom, leg.Body);
 
 	//universal joint
 	joint = dJointCreateUniversal(World, jointgroup);
@@ -649,13 +507,26 @@ void createInvisibleHead( float* pos )
 	dBodySetMass(invis_box.Body, &head_mass);
 
 	//geometry
-	invis_box.Geom[0] = dCreateBox(Space, 1.0, 1.0, 1.0);
-	dGeomSetBody(invis_box.Geom[0], invis_box.Body);
+	invis_box.Geom = dCreateBox(Space, 1.0, 1.0, 1.0);
+	dGeomSetBody(invis_box.Geom, invis_box.Body);
 
 	//fixed joint
 	invis_box_joint = dJointCreateFixed(World, jointgroup);
 	dJointAttach(invis_box_joint, body.Body, invis_box.Body);
 	dJointSetFixed(invis_box_joint);
+}
+
+void addFoodParticle( int food_prize, dWorldID* world, dSpaceID* space )
+{
+	dReal position[3] = { 0.0f };
+
+	position[0] = ( static_cast< int >( rng_engine() & 0x7FFFFFFF ) % 101 ) - 50;
+	position[1] = 0.0f;
+	position[2] = ( static_cast< int >( rng_engine() & 0x7FFFFFFF ) % 101 ) - 50;
+
+	anim.foodParticles.push_back( FoodParticle( position, food_prize, *world, *space ) );
+
+	int dummy = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -718,9 +589,9 @@ void initODE()
 	dMassSetCapsule(&bodyMass, 1.0, 3, radius, length);
 	//dMassSetBox(&bodyMass, 10, sides[0], sides[1], sides[2]);
 	dBodySetMass(body.Body, &bodyMass);
-	body.Geom[0] = dCreateCapsule(Space, radius, length);
-	//body.Geom[0] = dCreateBox(Space, sides[0], sides[1], sides[2]);
-	dGeomSetBody(body.Geom[0], body.Body);
+	body.Geom = dCreateCapsule(Space, radius, length);
+	//body.Geom = dCreateBox(Space, sides[0], sides[1], sides[2]);
+	dGeomSetBody(body.Geom, body.Body);
 
 	float head_pos[ 3 ] = { 0.0f, 5.0f, -1.0f };
 	createInvisibleHead( head_pos );
@@ -728,6 +599,57 @@ void initODE()
 	createFrontLegs();
 	createMiddleLegs();
 	createBackLegs();
+
+
+	//// target
+	//target.Body = dBodyCreate(World);
+	//dBodySetPosition(target.Body, startPosition[0], startPosition[1], startPosition[2]);
+	//dRFromEulerAngles(Orient3, 0.0, 0.0, 0.0);
+	//dBodySetRotation(target.Body, Orient3);
+	//dBodySetLinearVel(target.Body, 0.0, 0.0, 0.0);
+	//dBodySetData(target.Body, (void *)0);
+	//dMass targetMass;
+	//dMassSetBox(&targetMass, 1.0, 1.0, 1.0, 1.0);
+	//dBodySetMass(target.Body, &targetMass);
+	//target.Geom = dCreateBox(Space, 2.0, 2.0, 2.0);
+	//dGeomSetBody(target.Geom, target.Body);
+	const int foodPrize = 100;
+
+	/*dReal foodPosition1[3] = { 0.0, 5.0, -10.0 };
+	FoodParticle foodParticle1(foodPosition1, foodPrize, World, Space);
+	foodParticles.push_back(foodParticle1);
+
+	dReal foodPosition2[3] = {-10.0, 0.0, -20.0};
+	FoodParticle foodParticle2(foodPosition2, foodPrize, World, Space);
+	foodParticles.push_back(foodParticle2);
+
+	dReal foodPosition3[3] = { -20.0, 0.0, 10.0 };
+	FoodParticle foodParticle3(foodPosition3, foodPrize, World, Space);
+	foodParticles.push_back(foodParticle3);
+
+	anim.addKnownFoodParticle(foodParticle1);
+	anim.addKnownFoodParticle(foodParticle2);
+	anim.addKnownFoodParticle(foodParticle3);
+*/
+	for ( int i = 0; i < FOOD_COUNT; ++i )
+	{
+		addFoodParticle( 100, &World, &Space );
+		//anim.addKnownFoodParticle( anim.foodParticles.back() );
+	}
+	
+
+	dReal position[3] = { 0.0f };
+
+	position[0] = 0.0f;
+	position[1] = 0.0f;
+	position[2] = 10.0f;
+
+	anim.foodParticles.push_back( FoodParticle( position, 100, World, Space ) );
+
+
+
+	//anim.seekFoodParticleWithHighestScore();	
+
 
 	/*Joint2 = dJointCreateFixed(World, jointgroup);
 	dJointAttach(Joint2, body.Body, 0);
@@ -762,6 +684,20 @@ void closeODE()
 	dWorldDestroy( World );					//Destroy all bodies and joints (not in a group).
 }
 
+bool areGeomIDsOfLegAndSoughtFoodParticle(dGeomID o1, dGeomID o2) {
+
+	dGeomID foodParticleGeomID = anim.foodParticles[anim.getIndexOfFoodParticleSought()].odeObject.Geom;
+
+	return o1 == frontLeftOuterLeg.Geom && o2 == foodParticleGeomID ||
+		o1 == foodParticleGeomID && o2 == frontLeftOuterLeg.Geom ||
+		o1 == frontRightOuterLeg.Geom && o2 == foodParticleGeomID ||
+		o1 == foodParticleGeomID && o2 == frontRightOuterLeg.Geom ||
+		o1 == frLeg.Geom && o2 == foodParticleGeomID ||
+		o1 == foodParticleGeomID && o2 == frLeg.Geom ||
+		o1 == flLeg.Geom && o2 == foodParticleGeomID ||
+		o1 == foodParticleGeomID && o2 == flLeg.Geom;
+}
+
 /*******************************************************************************
 Function to handle potential collisions between geometries.
 *******************************************************************************/
@@ -781,45 +717,77 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 	for( I = 0; I < MAX_CONTACTS; I++ )
 	{
 		contacts[I].surface.mode = dContactBounce | dContactSoftCFM;
-		if (o1 == frLeg.Geom[0] || o2 == frLeg.Geom[0] ||
-			o1 == frontRightOuterLeg.Geom[0] || o2 == frontRightOuterLeg.Geom[0] ||
-			o1 == flLeg.Geom[0] || o2 == flLeg.Geom[0] ||
-			o1 == frontLeftOuterLeg.Geom[0] || o2 == frontLeftOuterLeg.Geom[0] ||
-			o1 == brLeg.Geom[0] || o2 == brLeg.Geom[0] ||
-			o1 == backRightOuterLeg.Geom[0] || o2 == backRightOuterLeg.Geom[0] ||
-			o1 == blLeg.Geom[0] || o2 == blLeg.Geom[0] ||
-			o1 == backLeftOuterLeg.Geom[0] || o2 == backLeftOuterLeg.Geom[0] )
+		if (o1 == frLeg.Geom || o2 == frLeg.Geom ||
+			o1 == frontRightOuterLeg.Geom || o2 == frontRightOuterLeg.Geom ||
+			o1 == flLeg.Geom || o2 == flLeg.Geom ||
+			o1 == frontLeftOuterLeg.Geom || o2 == frontLeftOuterLeg.Geom ||
+			o1 == brLeg.Geom || o2 == brLeg.Geom ||
+			o1 == backRightOuterLeg.Geom || o2 == backRightOuterLeg.Geom ||
+			o1 == blLeg.Geom || o2 == blLeg.Geom ||
+			o1 == backLeftOuterLeg.Geom || o2 == backLeftOuterLeg.Geom )
 		{
-			if ( o1 == backLeftOuterLeg.Geom[0] || o2 == backLeftOuterLeg.Geom[0] )
+			if ( o1 == backLeftOuterLeg.Geom || o2 == backLeftOuterLeg.Geom )
 			{
-				if ( anim.turn_right )
-				{
-					contacts[I].surface.mu = 20.0;
-				}
-				else
-				{
-					contacts[I].surface.mu = 0.5;
-				}
+				contacts[I].surface.mu = anim.left_leg_friction;
 			}
-			else if ( o1 == backRightOuterLeg.Geom[0] || o2 == backRightOuterLeg.Geom[0] )
+			else if ( o1 == backRightOuterLeg.Geom || o2 == backRightOuterLeg.Geom )
 			{
-				if ( anim.turn_left )
-				{
-					contacts[I].surface.mu = 20.0;
-				}
-				else
-				{
-					contacts[I].surface.mu = 0.5;
-				}
+				contacts[I].surface.mu = anim.right_leg_friction;
 			}
 			else
 			{
-				contacts[I].surface.mu = 0.5;
+				contacts[I].surface.mu = 0.0;
 			}
 		}
 		else
 		{
 			contacts[I].surface.mu = 10.0;
+		}
+
+		/*if (o1 == frontLeftOuterLeg.Geom && o2 == target.Geom ||
+			o1 == target.Geom && o2 == frontLeftOuterLeg.Geom ||
+			o1 == frontRightOuterLeg.Geom && o2 == target.Geom ||
+			o1 == target.Geom && o2 == frontRightOuterLeg.Geom) {
+
+
+
+			anim.turn_left = false;
+			anim.turn_right = false;
+			anim.active = false;
+			
+		}*/
+
+		if (anim.getIndexOfFoodParticleSought() > -1)
+		{
+			auto temp_idx = anim.getIndexOfFoodParticleSought();
+			dGeomID foodParticleGeomID = anim.foodParticles[temp_idx].odeObject.Geom;
+
+			if (areGeomIDsOfLegAndSoughtFoodParticle(o1, o2)) {
+
+				temp_idx = anim.getIndexOfFoodParticleSought();
+				objectsToDestroy.push_back(anim.foodParticles[temp_idx].odeObject);
+
+				//warning, temporarliy using anim.getIndexOfFoodParticleSought()
+				/*if (!anim.foodParticles.empty())
+					anim.foodParticles.erase(anim.foodParticles.begin() + anim.getIndexOfFoodParticleSought());*/
+
+				anim.removeSoughtFoodParticle();
+
+				if (anim.foodParticles.size() > 0)
+				{
+					//anim.seekFoodParticleWithHighestScore();
+				}
+				else
+				{
+					anim.turn_left = false;
+					anim.turn_right = false;
+					anim.active = false;
+				}
+
+			
+				
+			}
+			
 		}
 
 		//contacts[I].surface.mu = 1;
@@ -842,43 +810,10 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 			dJointAttach( c, b1, b2 );		//Attach two bodies to this contact joint.
 		}
 	}
+
+	int dummy2 = 0;
 }
 
-/*******************************************************************************
-Function to perform the simulation loop for ODE.
-*******************************************************************************/
-void simulationLoop()
-{
-	//First, determine which geoms inside the space are potentially colliding.
-	//The nearCallBack function will be responsible for analizing those potential collisions.
-	//The second parameter indicates that no user data is being sent the callback routine.
-	dSpaceCollide( Space, 0, &nearCallBack );
-
-	//Next, advance the simulation, based on the step size given.
-	dWorldStep( World, simulationStep );
-
-	//Then, remove the temporary contact joints.
-	dJointGroupEmpty( ContactGroup );
-
-
-	/*printf( "%f.4", Radians_To_Degrees( dJointGetUniversalAngle1( mlLegJoint ) ) );
-	printf( "\t\t%f.4\n", Radians_To_Degrees( dJointGetUniversalAngle2( mlLegJoint ) ) );*/
-
-	if ( anim.active )
-	{
-		change_direction( -20.0, 5.0, 20.0 );
-
-		anim.Forward();
-	}
-
-
-
-	//printf( "%f.4, %f.4, %f.4\n", dGeomGetPosition( invis_box.Geom[ 0 ] )[ 0 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 1 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 2 ] );
-
-
-
-	//At this point, all geometries have been updated, so they can be drawn from display().
-}
 
 /*******************************************************************************
 Function to transform an ODE orientation matrix into an OpenGL transformation
@@ -887,26 +822,26 @@ p -> a vector of three elements.
 R -> the rotation matrix, in row vector format, with 12 elements.
 M -> the resulting matrix, in vector format, with 16 elements.
 *******************************************************************************/
-void ODEToOpenGLMatrix( const dReal* p, const dReal* R, dReal* M)
+void ODEToOpenGLMatrix(const dReal* p, const dReal* R, dReal* M)
 {
-	M[0]  = R[0]; M[1]  = R[4]; M[2]  = R[8];  M[3]  = 0;
-    M[4]  = R[1]; M[5]  = R[5]; M[6]  = R[9];  M[7]  = 0;
-    M[8]  = R[2]; M[9]  = R[6]; M[10] = R[10]; M[11] = 0;
-    M[12] = p[0]; M[13] = p[1]; M[14] = p[2];  M[15] = 1;
+	M[0] = R[0]; M[1] = R[4]; M[2] = R[8];  M[3] = 0;
+	M[4] = R[1]; M[5] = R[5]; M[6] = R[9];  M[7] = 0;
+	M[8] = R[2]; M[9] = R[6]; M[10] = R[10]; M[11] = 0;
+	M[12] = p[0]; M[13] = p[1]; M[14] = p[2];  M[15] = 1;
 }
 
 /*******************************************************************************
 Function to render a box, given it sides length, position and orientation.
 *******************************************************************************/
-void renderBox( const dReal sides[3], const dReal position[3], const dReal orientation[12] )
+void renderBox(const dReal sides[3], const dReal position[3], const dReal orientation[12])
 {
 	glPushMatrix();					//Save current ModelView.
-	
+
 	dReal Matrix[16];				//The OpenGL version of the transformation matrix.
-	ODEToOpenGLMatrix( position, orientation, Matrix );
-	glMultMatrixd( Matrix );
-	glScaled( sides[0], sides[1], sides[2] );	//Scale to have the right measure in sides.
-	GDrawing::setColor( 0.5, 0.6, 0.7 );
+	ODEToOpenGLMatrix(position, orientation, Matrix);
+	glMultMatrixd(Matrix);
+	glScaled(sides[0], sides[1], sides[2]);	//Scale to have the right measure in sides.
+	GDrawing::setColor(0.5, 0.6, 0.7);
 	GDrawing::drawCube();
 
 	glPopMatrix();					//Restore ModelView.
@@ -923,7 +858,7 @@ void renderCylinder(const dReal radius, const dReal length, const dReal position
 	glMultMatrixd(Matrix);
 	glTranslated(0, 0, -length / 2);
 	glScaled(radius, radius, length);	//Scale to have the right measure in sides.
-	
+
 	GDrawing::setColor(0.5, 0.6, 0.7);
 	GDrawing::drawCylinder();
 
@@ -966,6 +901,86 @@ void renderCapsule(const dReal radius, const dReal length, const dReal position[
 
 }
 
+
+/*******************************************************************************
+Function to perform the simulation loop for ODE.
+*******************************************************************************/
+void simulationLoop()
+{
+	//First, determine which geoms inside the space are potentially colliding.
+	//The nearCallBack function will be responsible for analizing those potential collisions.
+	//The second parameter indicates that no user data is being sent the callback routine.
+	dSpaceCollide(Space, 0, &nearCallBack);
+
+	//Next, advance the simulation, based on the step size given.
+	dWorldStep(World, simulationStep);
+
+	//Then, remove the temporary contact joints.
+	dJointGroupEmpty(ContactGroup);
+
+
+	/*printf( "%f.4", Radians_To_Degrees( dJointGetUniversalAngle1( mlLegJoint ) ) );
+	printf( "\t\t%f.4\n", Radians_To_Degrees( dJointGetUniversalAngle2( mlLegJoint ) ) );*/
+
+	if (anim.active)
+	{
+		dMatrix3 orient;
+		dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
+		//if ( anim.seek ) anim.changeDirection(startPosition);
+
+		const dReal sides[3] = { 1, 1, 1 };
+
+		//renderBox(sides, startPosition, orient );
+
+		//anim.Forward();
+
+		anim.Move();
+	}
+
+
+
+	
+	//anim.removeSoughtFoodParticle();
+	for (auto i = 0; i < objectsToDestroy.size(); ++i){
+		const dBodyID foodParticleBodyID = objectsToDestroy[i].Body;
+		const dGeomID foodParticleGeomID = objectsToDestroy[i].Geom;
+	
+		/*const dReal * position = dGeomGetPosition(foodParticleGeomID);
+		dReal xPos = position[0];
+		dReal zPos = position[2];
+		dGeomSetPosition(foodParticleGeomID, xPos, -10, zPos);*/
+
+		dGeomDestroy(foodParticleGeomID);
+		dBodyDestroy(foodParticleBodyID);
+		
+	}
+
+	for (auto i = objectsToDestroy.size(); i > 0; --i){
+		
+		objectsToDestroy.erase(objectsToDestroy.begin() + i - 1);
+
+	}
+
+	anim.seekFoodParticleWithHighestScore();
+	int dummy = 0;
+
+	printf( "-----> # known food particles = %d\n\n", anim.known_target_counter );
+	printf( "\t\ttarget = %f.3, %f.3\n", anim.target_position[0], anim.target_position[2] );
+
+	for ( const auto& e : anim.foodParticles )
+	{
+		if ( e.known )
+		{
+			const dReal* position = dBodyGetPosition( e.odeObject.Body );
+
+			//printf( "x: %f.2, z: %f.2\n", position[0], position[2] );
+		}
+	}
+
+	//printf( "%f.4, %f.4, %f.4\n", dGeomGetPosition( invis_box.Geom[ 0 ] )[ 0 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 1 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 2 ] );
+	//At this point, all geometries have been updated, so they can be drawn from display().
+}
+
 /*******************************************************************************
 Function to draw a geometry object.
 *******************************************************************************/
@@ -977,10 +992,10 @@ void drawGeom( dGeomID g )
 	const dReal *position;		//Define pointers to internal positions and orientations.
 	const dReal *orientation;	//Pointers to constant objects (so the objects will not change).
 
+	int type = dGeomGetClass( g );				//Get the type of geometry.
+
 	position = dGeomGetPosition( g );		//Then, get the geometry position.
 	orientation = dGeomGetRotation( g );	//And get existing geometry orientation.
-
-	int type = dGeomGetClass( g );				//Get the type of geometry.
 	
 	if( type == dBoxClass )						//Is it a box?
 	{
@@ -1086,12 +1101,15 @@ void myKey(unsigned char key, int x, int y)
 		case 's':
 			g_frameSaver.DumpPPM(g_width,g_height);
 			break;
+		case 'x':
+			addFoodParticle( 100, &World, &Space );
+			anim.scan( anim.foodParticles.back() );
+			break;
 		case 'r':
 			resetArcball();
 			break;
 		case '1':
 			anim.active = !anim.active;
-			anim.reverse = !anim.reverse;
 			break;
 		case '2':
 			//anim.active = !anim.active;
@@ -1209,21 +1227,33 @@ void display(void)
 
 	////////////////////// Draw the geometries in World ////////////////////////
 
-	drawGeom( Object.Geom[0] );
-	drawGeom( Rod.Geom[0] );
-	drawGeom(body.Geom[0]);
-	drawGeom(middleRightLeg.Geom[0]);
-	drawGeom(middleLeftLeg.Geom[0]);
-	drawGeom(middleLeftOuterLeg.Geom[0]);
-	drawGeom(middleRightOuterLeg.Geom[0]);
-	drawGeom(brLeg.Geom[0]);
-	drawGeom(backRightOuterLeg.Geom[0]);
-	drawGeom(blLeg.Geom[0]);
-	drawGeom(backLeftOuterLeg.Geom[0]);
-	drawGeom(frLeg.Geom[0]);
-	drawGeom(frontRightOuterLeg.Geom[0]);
-	drawGeom(flLeg.Geom[0]);
-	drawGeom(frontLeftOuterLeg.Geom[0]);
+	drawGeom( Object.Geom );
+	drawGeom( Rod.Geom );
+	drawGeom(body.Geom);
+	drawGeom(middleRightLeg.Geom);
+	drawGeom(middleLeftLeg.Geom);
+	drawGeom(middleLeftOuterLeg.Geom);
+	drawGeom(middleRightOuterLeg.Geom);
+	drawGeom(brLeg.Geom);
+	drawGeom(backRightOuterLeg.Geom);
+	drawGeom(blLeg.Geom);
+	drawGeom(backLeftOuterLeg.Geom);
+	drawGeom(frLeg.Geom);
+	drawGeom(frontRightOuterLeg.Geom);
+	drawGeom(flLeg.Geom);
+	drawGeom(frontLeftOuterLeg.Geom);
+
+	for (auto i = 0; i < anim.foodParticles.size(); ++i)
+	{
+		drawGeom(anim.foodParticles.at(i).odeObject.Geom);
+
+	}
+
+	/*dMatrix3 orient;
+	dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
+	const dReal sides[3] = { 1, 1, 1 };
+	renderBox(sides, startPosition, orient);*/
+	drawGeom(target.Geom);
 
 	glPushMatrix();						//Draw the collision plane.
 	glTranslated( 0.0, -0.05, 0.0 );
@@ -1258,7 +1288,7 @@ void myReshape(int w, int h)
 	// This defines the field of view of the camera.
     // Making the first 4 parameters larger will give a larger field of 
 	// view, therefore making the objects in the scene appear smaller.
-	glOrtho(-asp*15, asp*15, -15, 15, -500,500);
+	glOrtho(-asp*15, asp*15, -15, 15, -500, 2000);
 
 	// Use either of the following functions to set up a perspective view
 	//gluPerspective(20,(float) w/(float) h,1,100) ;
