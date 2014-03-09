@@ -1,19 +1,27 @@
+
 #pragma once
 
 #include <ode/ode.h>
-#include <chrono>
-#include <cmath>
 #include "ODEObject.h"
 
 
 struct FoodParticle
 {
+	bool known;
+	dReal distance;
+
 	dReal prize;
 	ODEObject odeObject;
 
-	FoodParticle(dReal position[3], dReal p, dWorldID world, dSpaceID space)
+	int colored;
+
+	FoodParticle(dReal position[3],
+				 dReal prize,
+				 dWorldID world, dSpaceID space) : known( false ),
+												   distance( -1000000.0f ),
+												   prize( prize ),
+												   colored( 0 )
 	{
-		prize = p;
 		createFoodParticleODEObject(position, world, space);
 	};
 
@@ -33,5 +41,4 @@ struct FoodParticle
 		dGeomSetBody(odeObject.Geom, odeObject.Body);
 
 	}
-
 };
