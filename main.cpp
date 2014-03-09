@@ -21,8 +21,7 @@ Basic Example for ODE Usage
 #include "angle_conversions.h"
 #include "ODEObject.h"
 #include "FoodParticle.h"
-
-using namespace std;
+#include "Animation.h"
 
 #include "Ball.h"
 #include "FrameSaver.h"
@@ -65,19 +64,10 @@ double g_time = 0.0 ;
 ////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////// ODE Global Variables ///////////////////////////////
-dReal simulationTime = 0.0;
-dReal simulationStep = 0.01;
+dReal simulationTime = 0.0f;
+dReal simulationStep = 0.01f;
 
-//struct ODEObject
-//{
-//	dBodyID Body;		//The dynamics body.
-//	dGeomID Geom;	//Geometries representing this body.
-//};
-
-
-
-ODEObject Object;			//The rigid body (a box).
-ODEObject Rod;
+ODEObject head;
 ODEObject body;				//Insect Body
 ODEObject frLeg;
 ODEObject frontRightOuterLeg;
@@ -95,7 +85,6 @@ dWorldID World;				//Dynamics world.
 dSpaceID Space;				//A space that defines collisions.
 dJointGroupID jointgroup;   // contact group for the new joint
 dJointGroupID ContactGroup;	//Group of contact joints for collision detection/handling.
-ODEObject invis_box;
 ODEObject target;
 
 
@@ -116,16 +105,16 @@ dJointID invis_box_joint;
 
 std::mt19937 rng_engine;
 
-
 //*******WARNING**********
 //must be same order as food particle vector in Animation.h!!!
 //vector<FoodParticle> foodParticles;
 //*******WARNING**********
-vector<ODEObject> objectsToDestroy;
+std::vector<ODEObject> objectsToDestroy;
 
-#include "Animation.h"
-
-Animator anim(&mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint, 1.0, 100.0, 1000.0);
+Animator animator( &head, &body,
+				   &mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint,
+				   1.0f,
+				   100.0f, 1000.0f );
 
 
 /*
@@ -231,8 +220,6 @@ void createUniversalLeg(ODEObject &leg,
 	dJointSetUniversalParam(joint, dParamLoStop, minAngle);
 	dJointSetUniversalParam(joint, dParamHiStop2, maxAngle);
 	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
-	
-
 }
 
 
@@ -289,8 +276,6 @@ void createUniversalSquareLeg(ODEObject &leg,
 	dJointSetUniversalParam(joint, dParamLoStop, minAngle);
 	dJointSetUniversalParam(joint, dParamHiStop2, maxAngle);
 	dJointSetUniversalParam(joint, dParamLoStop2, minAngle);
-
-
 }
 
 
@@ -408,24 +393,6 @@ void createMiddleLegs()
 		xPosOuter, yPosOuter, zPosOuter,
 		xRotOuter, yRotOuter, zRotOuter,
 		radiusOuter, lengthOuter);
-
-
-	
-	/*createUniversalSquareLeg(middleLeftLeg,
-		mlLegJoint,
-		3, 1, 0,
-		0, 0, 0,
-		sides,
-		maxAngle, minAngle,
-		0, 1, 0);*/
-
-	/*createUniversalSquareLeg(middleLeftLeg,
-		mlLegJoint,
-		-xPos, yPos, zPos,
-		xRot, -yRot, zRot,
-		sides,
-		maxAngle, minAngle,
-		1.25, anchorYPos, anchorZPos);*/
 }
 
 /*
@@ -495,38 +462,41 @@ void createInvisibleHead( float* pos )
 	dRFromEulerAngles(head_orientation, 0.0, 0.0, 0.0);
 
 	//position and orientation
-	invis_box.Body = dBodyCreate(World);
-	dBodySetPosition(invis_box.Body, pos[ 0 ], pos[ 1 ], pos[ 2 ]);
-	dBodySetRotation(invis_box.Body, head_orientation);
-	dBodySetLinearVel(invis_box.Body, 0, 0, 0);
-	dBodySetData(invis_box.Body, (void *)0);
+	head.Body = dBodyCreate(World);
+	dBodySetPosition(head.Body, pos[ 0 ], pos[ 1 ], pos[ 2 ]);
+	dBodySetRotation(head.Body, head_orientation);
+	dBodySetLinearVel(head.Body, 0, 0, 0);
+	dBodySetData(head.Body, (void *)0);
 
 	//mass
 	dMass head_mass;
 	dMassSetBox(&head_mass, 1.0, 1.0, 1.0, 1.0);
-	dBodySetMass(invis_box.Body, &head_mass);
+	dBodySetMass(head.Body, &head_mass);
 
 	//geometry
-	invis_box.Geom = dCreateBox(Space, 1.0, 1.0, 1.0);
-	dGeomSetBody(invis_box.Geom, invis_box.Body);
+	head.Geom = dCreateBox(Space, 1.0, 1.0, 1.0);
+	dGeomSetBody(head.Geom, head.Body);
 
 	//fixed joint
 	invis_box_joint = dJointCreateFixed(World, jointgroup);
-	dJointAttach(invis_box_joint, body.Body, invis_box.Body);
+	dJointAttach(invis_box_joint, body.Body, head.Body);
 	dJointSetFixed(invis_box_joint);
 }
 
-void addFoodParticle( int food_prize, dWorldID* world, dSpaceID* space )
+void addFoodParticle( dReal position[3], int food_prize, dWorldID* world, dSpaceID* space )
+{
+	animator.foodParticles.push_back( FoodParticle( position, food_prize, *world, *space ) );
+}
+
+void addRandomFoodParticle( int food_prize, dWorldID* world, dSpaceID* space )
 {
 	dReal position[3] = { 0.0f };
 
 	position[0] = ( static_cast< int >( rng_engine() & 0x7FFFFFFF ) % 101 ) - 50;
-	position[1] = 0.0f;
+	position[1] = 20.0f;
 	position[2] = ( static_cast< int >( rng_engine() & 0x7FFFFFFF ) % 101 ) - 50;
 
-	anim.foodParticles.push_back( FoodParticle( position, food_prize, *world, *space ) );
-
-	int dummy = 0;
+	animator.foodParticles.push_back( FoodParticle( position, food_prize, *world, *space ) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -600,76 +570,12 @@ void initODE()
 	createMiddleLegs();
 	createBackLegs();
 
+	rng_engine.seed( std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::system_clock::now().time_since_epoch() ).count() );
 
-	//// target
-	//target.Body = dBodyCreate(World);
-	//dBodySetPosition(target.Body, startPosition[0], startPosition[1], startPosition[2]);
-	//dRFromEulerAngles(Orient3, 0.0, 0.0, 0.0);
-	//dBodySetRotation(target.Body, Orient3);
-	//dBodySetLinearVel(target.Body, 0.0, 0.0, 0.0);
-	//dBodySetData(target.Body, (void *)0);
-	//dMass targetMass;
-	//dMassSetBox(&targetMass, 1.0, 1.0, 1.0, 1.0);
-	//dBodySetMass(target.Body, &targetMass);
-	//target.Geom = dCreateBox(Space, 2.0, 2.0, 2.0);
-	//dGeomSetBody(target.Geom, target.Body);
-	const int foodPrize = 100;
+	const int foodPrize = 10;
 
-	/*dReal foodPosition1[3] = { 0.0, 5.0, -10.0 };
-	FoodParticle foodParticle1(foodPosition1, foodPrize, World, Space);
-	foodParticles.push_back(foodParticle1);
-
-	dReal foodPosition2[3] = {-10.0, 0.0, -20.0};
-	FoodParticle foodParticle2(foodPosition2, foodPrize, World, Space);
-	foodParticles.push_back(foodParticle2);
-
-	dReal foodPosition3[3] = { -20.0, 0.0, 10.0 };
-	FoodParticle foodParticle3(foodPosition3, foodPrize, World, Space);
-	foodParticles.push_back(foodParticle3);
-
-	anim.addKnownFoodParticle(foodParticle1);
-	anim.addKnownFoodParticle(foodParticle2);
-	anim.addKnownFoodParticle(foodParticle3);
-*/
-	for ( int i = 0; i < FOOD_COUNT; ++i )
-	{
-		addFoodParticle( 100, &World, &Space );
-		//anim.addKnownFoodParticle( anim.foodParticles.back() );
-	}
-	
-
-	dReal position[3] = { 0.0f };
-
-	position[0] = 0.0f;
-	position[1] = 0.0f;
-	position[2] = 10.0f;
-
-	anim.foodParticles.push_back( FoodParticle( position, 100, World, Space ) );
-
-
-
-	//anim.seekFoodParticleWithHighestScore();	
-
-
-	/*Joint2 = dJointCreateFixed(World, jointgroup);
-	dJointAttach(Joint2, body.Body, 0);
-	dJointSetFixed(Joint2);*/
-
-
-	/*Joint = dJointCreateHinge(World, jointgroup);
-	dJointAttach(Joint, Object.Body, Rod.Body);
-	dJointSetHingeAnchor(Joint, 0, 10 - sides[0] / 2, 0);
-	dJointSetHingeAxis(Joint, 1, 0, 0);*/
-
-	//dVector3 result;
-	//dJointGetUniversalAnchor(mlLegJoint, result);
-	//for (auto e : result)
-	//{
-	//	cout << e << endl;
-	//}
-	
-
-
+	dReal position[3] = { 10.0f, 0.0f, -20.0f };
+	addFoodParticle( position, foodPrize, &World, &Space );
 }
 
 
@@ -686,7 +592,7 @@ void closeODE()
 
 bool areGeomIDsOfLegAndSoughtFoodParticle(dGeomID o1, dGeomID o2) {
 
-	dGeomID foodParticleGeomID = anim.foodParticles[anim.getIndexOfFoodParticleSought()].odeObject.Geom;
+	dGeomID foodParticleGeomID = animator.foodParticles[animator.getIndexOfFoodParticleSought()].odeObject.Geom;
 
 	return o1 == frontLeftOuterLeg.Geom && o2 == foodParticleGeomID ||
 		o1 == foodParticleGeomID && o2 == frontLeftOuterLeg.Geom ||
@@ -728,11 +634,11 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 		{
 			if ( o1 == backLeftOuterLeg.Geom || o2 == backLeftOuterLeg.Geom )
 			{
-				contacts[I].surface.mu = anim.left_leg_friction;
+				contacts[I].surface.mu = animator.left_leg_friction;
 			}
 			else if ( o1 == backRightOuterLeg.Geom || o2 == backRightOuterLeg.Geom )
 			{
-				contacts[I].surface.mu = anim.right_leg_friction;
+				contacts[I].surface.mu = animator.right_leg_friction;
 			}
 			else
 			{
@@ -744,48 +650,24 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 			contacts[I].surface.mu = 10.0;
 		}
 
-		/*if (o1 == frontLeftOuterLeg.Geom && o2 == target.Geom ||
-			o1 == target.Geom && o2 == frontLeftOuterLeg.Geom ||
-			o1 == frontRightOuterLeg.Geom && o2 == target.Geom ||
-			o1 == target.Geom && o2 == frontRightOuterLeg.Geom) {
-
-
-
-			anim.turn_left = false;
-			anim.turn_right = false;
-			anim.active = false;
-			
-		}*/
-
-		if (anim.getIndexOfFoodParticleSought() > -1)
+		if (animator.getIndexOfFoodParticleSought() > -1)
 		{
-			auto temp_idx = anim.getIndexOfFoodParticleSought();
-			dGeomID foodParticleGeomID = anim.foodParticles[temp_idx].odeObject.Geom;
+			auto temp_idx = animator.getIndexOfFoodParticleSought();
+			dGeomID foodParticleGeomID = animator.foodParticles[temp_idx].odeObject.Geom;
 
 			if (areGeomIDsOfLegAndSoughtFoodParticle(o1, o2)) {
 
-				temp_idx = anim.getIndexOfFoodParticleSought();
-				objectsToDestroy.push_back(anim.foodParticles[temp_idx].odeObject);
+				temp_idx = animator.getIndexOfFoodParticleSought();
+				objectsToDestroy.push_back(animator.foodParticles[temp_idx].odeObject);
 
-				//warning, temporarliy using anim.getIndexOfFoodParticleSought()
-				/*if (!anim.foodParticles.empty())
-					anim.foodParticles.erase(anim.foodParticles.begin() + anim.getIndexOfFoodParticleSought());*/
+				animator.current_energy_level += animator.foodParticles[temp_idx].prize;
 
-				anim.removeSoughtFoodParticle();
+				animator.removeSoughtFoodParticle();
 
-				if (anim.foodParticles.size() > 0)
+				if (animator.foodParticles.size() == 0)
 				{
-					//anim.seekFoodParticleWithHighestScore();
-				}
-				else
-				{
-					anim.turn_left = false;
-					anim.turn_right = false;
-					anim.active = false;
-				}
-
-			
-				
+					//animator.active = false;
+				}	
 			}
 			
 		}
@@ -833,7 +715,7 @@ void ODEToOpenGLMatrix(const dReal* p, const dReal* R, dReal* M)
 /*******************************************************************************
 Function to render a box, given it sides length, position and orientation.
 *******************************************************************************/
-void renderBox(const dReal sides[3], const dReal position[3], const dReal orientation[12])
+void renderBox(const dReal sides[3], const dReal position[3], const dReal orientation[12], int colored = 0)
 {
 	glPushMatrix();					//Save current ModelView.
 
@@ -841,7 +723,14 @@ void renderBox(const dReal sides[3], const dReal position[3], const dReal orient
 	ODEToOpenGLMatrix(position, orientation, Matrix);
 	glMultMatrixd(Matrix);
 	glScaled(sides[0], sides[1], sides[2]);	//Scale to have the right measure in sides.
-	GDrawing::setColor(0.5, 0.6, 0.7);
+	
+	if ( colored == 0 ) 
+		GDrawing::setColor(0.1f, 0.1f, 0.1f);
+	else if ( colored == 1 )
+		GDrawing::setColor(1.0f, 1.0f, 0.0f);
+	else if ( colored == 2 )
+		GDrawing::setColor(1.0f, 0.0f, 0.0f);
+	
 	GDrawing::drawCube();
 
 	glPopMatrix();					//Restore ModelView.
@@ -859,7 +748,7 @@ void renderCylinder(const dReal radius, const dReal length, const dReal position
 	glTranslated(0, 0, -length / 2);
 	glScaled(radius, radius, length);	//Scale to have the right measure in sides.
 
-	GDrawing::setColor(0.5, 0.6, 0.7);
+	GDrawing::setColor(0.25, 0.25, 0.25);
 	GDrawing::drawCylinder();
 
 	glPopMatrix();					//Restore ModelView.
@@ -880,7 +769,7 @@ void renderCapsule(const dReal radius, const dReal length, const dReal position[
 	glPushMatrix();					//Save current ModelView.
 	glTranslated(0, 0, length / 2);
 	glScaled(sphereR, sphereR, sphereR);
-	GDrawing::setColor(0.5, 0.6, 0.7);
+	GDrawing::setColor( 66.0f/255.0f, 33.0f/255.0f, 0.0f/255.0f);
 	GDrawing::drawSphere();
 	glPopMatrix(); //unscaled and at top
 
@@ -895,10 +784,6 @@ void renderCapsule(const dReal radius, const dReal length, const dReal position[
 	GDrawing::drawSphere();
 
 	glPopMatrix();					//Restore ModelView.
-
-
-
-
 }
 
 
@@ -918,41 +803,23 @@ void simulationLoop()
 	//Then, remove the temporary contact joints.
 	dJointGroupEmpty(ContactGroup);
 
-
-	/*printf( "%f.4", Radians_To_Degrees( dJointGetUniversalAngle1( mlLegJoint ) ) );
-	printf( "\t\t%f.4\n", Radians_To_Degrees( dJointGetUniversalAngle2( mlLegJoint ) ) );*/
-
-	if (anim.active)
+	if (animator.active)
 	{
 		dMatrix3 orient;
 		dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
-		//if ( anim.seek ) anim.changeDirection(startPosition);
 
 		const dReal sides[3] = { 1, 1, 1 };
 
-		//renderBox(sides, startPosition, orient );
-
-		//anim.Forward();
-
-		anim.Move();
+		animator.Move();
 	}
 
-
-
-	
-	//anim.removeSoughtFoodParticle();
-	for (auto i = 0; i < objectsToDestroy.size(); ++i){
+	for (auto i = 0; i < objectsToDestroy.size(); ++i)
+	{
 		const dBodyID foodParticleBodyID = objectsToDestroy[i].Body;
 		const dGeomID foodParticleGeomID = objectsToDestroy[i].Geom;
 	
-		/*const dReal * position = dGeomGetPosition(foodParticleGeomID);
-		dReal xPos = position[0];
-		dReal zPos = position[2];
-		dGeomSetPosition(foodParticleGeomID, xPos, -10, zPos);*/
-
 		dGeomDestroy(foodParticleGeomID);
-		dBodyDestroy(foodParticleBodyID);
-		
+		dBodyDestroy(foodParticleBodyID);	
 	}
 
 	for (auto i = objectsToDestroy.size(); i > 0; --i){
@@ -961,30 +828,40 @@ void simulationLoop()
 
 	}
 
-	anim.seekFoodParticleWithHighestScore();
-	int dummy = 0;
+	//animator.updateEnergyLevel();
+	animator.dealWithBoundries();
 
-	printf( "-----> # known food particles = %d\n\n", anim.known_target_counter );
-	printf( "\t\ttarget = %f.3, %f.3\n", anim.target_position[0], anim.target_position[2] );
-
-	for ( const auto& e : anim.foodParticles )
+	if ( animator.starving )
 	{
-		if ( e.known )
-		{
-			const dReal* position = dBodyGetPosition( e.odeObject.Body );
-
-			//printf( "x: %f.2, z: %f.2\n", position[0], position[2] );
-		}
+		animator.seekFoodParticleWithHighestScore();
+	
+		printf( "# known food particles = %d\n", animator.known_target_counter );
+		printf( "\t\ttarget = %f.3, %f.3\n\n", animator.target_position[0], animator.target_position[2] );
 	}
 
-	//printf( "%f.4, %f.4, %f.4\n", dGeomGetPosition( invis_box.Geom[ 0 ] )[ 0 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 1 ], dGeomGetPosition( invis_box.Geom[ 0 ] )[ 2 ] );
+	// FOR DEBUGGING
+	//for ( const auto& e : animator.foodParticles )
+	//{
+	//	if ( e.known )
+	//	{
+	//		const dReal* position = dBodyGetPosition( e.odeObject.Body );
+	//
+	//		//printf( "x: %f.2, z: %f.2\n", position[0], position[2] );
+	//	}
+	//}
+
 	//At this point, all geometries have been updated, so they can be drawn from display().
 }
 
 /*******************************************************************************
 Function to draw a geometry object.
 *******************************************************************************/
-void drawGeom( dGeomID g )
+
+
+
+
+
+void drawGeom( dGeomID g, int colored = 0 )
 {
 	if( !g )		//If the geometry object is missing, end the function.
 		return;
@@ -998,11 +875,10 @@ void drawGeom( dGeomID g )
 	orientation = dGeomGetRotation( g );	//And get existing geometry orientation.
 	
 	if( type == dBoxClass )						//Is it a box?
-	{
-		
+	{		
 		dReal sides[3];
 		dGeomBoxGetLengths( g, sides );				//Get length of sides.
-		renderBox( sides, position, orientation );	//Render the actual box in environment.
+		renderBox( sides, position, orientation, colored );	//Render the actual box in environment.
 	}
 	else if (type == dCylinderClass)
 	{
@@ -1036,65 +912,6 @@ void myKey(unsigned char key, int x, int y)
 	const double speed = 1.0;
 	switch (key) 
 	{
-		case 't':
-			dJointSetUniversalParam(mlLegJoint, dParamVel, speed);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax, 100.0);
-			dJointSetUniversalParam(mlLegJoint, dParamVel2, 0.0);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax2, 100.0);
-
-			dJointSetUniversalParam(mrLegJoint, dParamVel, -speed);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mrLegJoint, dParamVel2, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax2, 100);
-		break;
-		case 'y':
-			dJointSetUniversalParam(mlLegJoint, dParamVel, -speed);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mlLegJoint, dParamVel2, 0);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax2, 100);
-
-			dJointSetUniversalParam(mrLegJoint, dParamVel, speed);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mrLegJoint, dParamVel2, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax2, 100);
-			break;
-		case 'u':
-			dJointSetUniversalParam(mlLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mlLegJoint, dParamVel2, 0);	
-			dJointSetUniversalParam(mlLegJoint, dParamFMax2, 100);
-
-			dJointSetUniversalParam(mrLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mrLegJoint, dParamVel2, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax2, 100);
-			break;
-		case 'i':
-			dJointSetUniversalParam(mlLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mlLegJoint, dParamVel2, speed);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax2, 100);
-
-			dJointSetUniversalParam(mrLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mrLegJoint, dParamVel2, -speed);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax2, 100);
-		break;
-		case 'o':
-			dJointSetUniversalParam(mlLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mlLegJoint, dParamVel2, -speed);
-			dJointSetUniversalParam(mlLegJoint, dParamFMax2, 100);
-
-			dJointSetUniversalParam(mrLegJoint, dParamVel, 0);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax, 100);
-			dJointSetUniversalParam(mrLegJoint, dParamVel2, speed);
-			dJointSetUniversalParam(mrLegJoint, dParamFMax2, 100);
-		break;
-		case 'p':
-			dJointAddUniversalTorques(mlLegJoint, 50, -50);
-			dJointAddUniversalTorques(mrLegJoint, 50, 50);
-		break;
 		case 'q':
 		case 27:
 			exit(0); 
@@ -1102,22 +919,14 @@ void myKey(unsigned char key, int x, int y)
 			g_frameSaver.DumpPPM(g_width,g_height);
 			break;
 		case 'x':
-			addFoodParticle( 100, &World, &Space );
-			anim.scan( anim.foodParticles.back() );
+			addRandomFoodParticle( 100, &World, &Space );
+			animator.scanForFood( animator.foodParticles.back() );
 			break;
 		case 'r':
 			resetArcball();
 			break;
 		case '1':
-			anim.active = !anim.active;
-			break;
-		case '2':
-			//anim.active = !anim.active;
-			anim.turn_right = !anim.turn_right;
-			break;
-		case '3':
-			//anim.active = !anim.active;
-			anim.turn_left = !anim.turn_left;
+			animator.active = !animator.active;
 			break;
 		case 'a':
 			g_animate = 1 - g_animate;
@@ -1131,12 +940,12 @@ void myKey(unsigned char key, int x, int y)
 		case 'm':
 			if( g_recording == 1 )
 			{
-				cout << "Frame recording disabled." << endl;
+				std::cout << "Frame recording disabled." << std::endl;
 				g_recording = 0;
 			}
 			else
 			{
-				cout << "Frame recording enabled." << endl;
+				std::cout << "Frame recording enabled." << std::endl;
 				g_recording = 1 ;
 			}
 			g_frameSaver.Toggle();
@@ -1157,7 +966,6 @@ void myinit(void)
     GLfloat ambient[] = { 0.2, 0.2, 0.2, 1.0 };
     GLfloat diffuse[] = { 1.0, 1.0, 1.0, 1.0 };
     GLfloat specular[] = { 1.0, 1.0, 1.0, 1.0 };
-    //GLfloat position[] = { -3.0, 3.0, 3.0, 0.0 };
 	GLfloat position[] = { 0.0, 0.0, 30.0, 1.0 };
 	GLfloat diffuse2[] = { 0.3, 0.3, 0.3, 1.0 };
     GLfloat specular2[] = { 0.3, 0.3, 0.3, 1.0 };
@@ -1227,8 +1035,8 @@ void display(void)
 
 	////////////////////// Draw the geometries in World ////////////////////////
 
-	drawGeom( Object.Geom );
-	drawGeom( Rod.Geom );
+	//drawGeom( Object.Geom );
+	//drawGeom( Rod.Geom );
 	drawGeom(body.Geom);
 	drawGeom(middleRightLeg.Geom);
 	drawGeom(middleLeftLeg.Geom);
@@ -1243,22 +1051,18 @@ void display(void)
 	drawGeom(flLeg.Geom);
 	drawGeom(frontLeftOuterLeg.Geom);
 
-	for (auto i = 0; i < anim.foodParticles.size(); ++i)
+	for (auto i = 0; i < animator.foodParticles.size(); ++i)
 	{
-		drawGeom(anim.foodParticles.at(i).odeObject.Geom);
+		drawGeom(animator.foodParticles.at(i).odeObject.Geom, animator.foodParticles.at(i).colored );
 
 	}
 
-	/*dMatrix3 orient;
-	dRFromEulerAngles(orient, 0.0, 0.0, 0.0);
-	const dReal sides[3] = { 1, 1, 1 };
-	renderBox(sides, startPosition, orient);*/
 	drawGeom(target.Geom);
 
 	glPushMatrix();						//Draw the collision plane.
 	glTranslated( 0.0, -0.05, 0.0 );
-	glScaled( 100.0, 0.1, 100.0 );
-	GDrawing::setColor( 1.0, 0.2, 0.3 );
+	glScaled( 140.0, 0.1, 140.0 );
+	GDrawing::setColor( 0.4, 0.4, 1.0 );
 	GDrawing::drawCube();
 	glPopMatrix();
 
@@ -1279,7 +1083,7 @@ void myReshape(int w, int h)
 
 	float asp = (float) w / (float) h ;
 
-	cout << "New aspect ratio " << asp << endl;
+	std::cout << "New aspect ratio " << asp << std::endl;
 
 	glViewport(0, 0, w,h);
 	glMatrixMode(GL_PROJECTION);
@@ -1355,9 +1159,9 @@ void myMotionCB(int x, int y)
 	else if( g_button == GLUT_RIGHT_BUTTON )
 	{
 		if( y - g_previousY > 0 )
-			g_zoom  = g_zoom * 1.03;
+			g_zoom  = g_zoom * 1.03f;
 		else 
-			g_zoom  = g_zoom * 0.97;
+			g_zoom  = g_zoom * 0.97f;
 		g_previousY = y;
 		glutPostRedisplay();
 	}

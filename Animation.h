@@ -10,47 +10,81 @@
 #include <algorithm>
 
 
+enum class Boundry {
+	min_X,
+	max_X,
+	min_Z,
+	max_Z
+};
+
+
 struct Animator {
 	bool active;
-	
-	bool turn_right;
-	bool turn_left;
-	
+	bool first_time;
+	bool starving;
+	bool out_of_boundry;
+
 	int known_target_counter;
-	dReal max_distance;
+	dReal max_visible_distance;
 	dReal field_of_view;
 
 	dReal right_leg_friction;
 	dReal left_leg_friction;
 
-	dReal target_position[3];
 	dReal max_vert_force;
 	dReal max_horiz_force;
 	
-	//vector<FoodParticle> foodParticles;
-	vector<FoodParticle> foodParticles;
-	//vector<dReal> knownFoodParticleScores;
-	//vector<FoodParticle> listOfFoodParticles;
+	dReal boundry_length;
+	dReal boundry_threshold;
+
+	__int64  energy_consumption_period; // in milliseconds
+	int		 energy_consumption_per_period;
+	int		 current_energy_level;
+	int		 starvation_threshold;
 	
 	int ndxOfFoodParticleSought;
 
-	Animator(dJointID* right, dJointID* left,
-				  dJointID* back_right, dJointID* back_left,
-				  double speed,
-				  dReal max_vert_force, dReal max_horiz_force)
-												  : active(false), turn_right(false), turn_left(false), known_target_counter( 0 ),
-												    max_distance( 40.0f ), field_of_view( 85.0f ),
-												   right_leg_friction(0.0), left_leg_friction(0.0),
-												   speed( speed ),
-												   max_vert_force(max_vert_force), max_horiz_force(max_horiz_force ),
-												   right_leg( right ), left_leg( left ),
-												   back_left( back_left ), back_right( back_right ),
-												   previous_angle_at_dir_change( 0.0 ), first_time( true )
+	ODEObject* head;
+	ODEObject* body;
+
+	dJointID* right_leg;
+	dJointID* left_leg;
+
+	dJointID* back_right;
+	dJointID* back_left;
+
+	float  speed;
+
+	dReal previous_angle_at_dir_change;
+
+	std::vector<FoodParticle> foodParticles;
+	dReal target_position[3];
+
+	Animator( ODEObject* head, ODEObject* body,
+			  dJointID* right, dJointID* left,
+			  dJointID* back_right, dJointID* back_left,
+			  float speed,
+			  dReal max_vert_force, dReal max_horiz_force)
+												  : active(false), first_time( true ), starving( true ), out_of_boundry( false ),
+												    known_target_counter( 0 ),
+												    max_visible_distance( 40.0f ), field_of_view( 85.0f ),
+												    right_leg_friction(0.0f), left_leg_friction(0.0f),
+												    max_vert_force(max_vert_force), max_horiz_force(max_horiz_force ),
+													boundry_length( 50.0f ), boundry_threshold( 49.5f ),
+												    energy_consumption_period( 1000ll ), energy_consumption_per_period( 1 ),
+													current_energy_level( 100 ), starvation_threshold( 15 ),
+												    head( head ), body( body ),
+													right_leg( right ), left_leg( left ),
+												    back_right( back_right ), back_left( back_left ),
+												    speed( speed ),
+												    previous_angle_at_dir_change( 0.0f )
 	{
-		//target_position
+		target_position[0] = 0.0f;
+		target_position[1] = 0.0f;
+		target_position[2] = 0.0f;
 	}
 
-	int getIndexOfFoodParticleSought()
+	int getIndexOfFoodParticleSought( void )
 	{
 		return ndxOfFoodParticleSought;
 	}
@@ -66,10 +100,42 @@ struct Animator {
 		dReal zComponent = position2[2] - position1[2];
 		zComponent *= zComponent;
 
-		return std::sqrtf( xComponent + yComponent + zComponent );//pow(xComponent + yComponent + zComponent, 0.5);
+		return std::sqrtf( xComponent + yComponent + zComponent );
 	}
 
-	void scan(FoodParticle& food_particle)
+	void updateEnergyLevel( void )
+	{
+		static auto prev_time_point = std::chrono::high_resolution_clock::now();
+		
+		auto elapsed_time = std::chrono::duration_cast< std::chrono::milliseconds >( std::chrono::high_resolution_clock::now() - prev_time_point ).count();
+		if ( elapsed_time > energy_consumption_period )
+		{
+			prev_time_point = std::chrono::high_resolution_clock::now();
+			//starving 
+			current_energy_level -= energy_consumption_per_period;
+		}
+
+		//printf( "*** Current Energy Level: %d\t Starving? %s\n", current_energy_level, ( starving ) ? "True" : "False" );
+
+		if ( current_energy_level > starvation_threshold )
+		{
+			active = false;
+			starving = false;
+			return;
+		}
+
+		if ( starving )
+		{
+			return;
+		}
+
+		active = true;
+		starving = true;
+		
+		return;
+	}
+
+	void scanForFood(FoodParticle& food_particle)
 	{
 		if ( food_particle.known )
 		{
@@ -80,39 +146,44 @@ struct Animator {
 		
 		if ( alpha < field_of_view )
 		{
-			const dReal* head_position = dGeomGetPosition(invis_box.Geom);
+			const dReal* head_position = dGeomGetPosition(head->Geom);
 			const dReal* food_position = dGeomGetPosition(food_particle.odeObject.Geom);
 
-			if ( findEuclideanDistance( head_position, food_position ) < max_distance )
+			if ( findEuclideanDistance( head_position, food_position ) < max_visible_distance )
 			{
-				food_particle.known = true;				
-				food_particle.score = getFoodParticleScore(food_particle);
-
+				food_particle.known = true;
+				food_particle.distance = getFoodParticleScore(food_particle);
+				food_particle.colored = 1;
 				++known_target_counter;
 			}
 		}
+		/*else
+		{
+			food_particle.known = false;
+			food_particle.colored = 0;
+		}*/
 	}
 
 	dReal getFoodParticleScore(FoodParticle foodParticle)
 	{
-		const dReal* head_position = dGeomGetPosition(invis_box.Geom);
+		const dReal* head_position = dGeomGetPosition(head->Geom);
 		const dReal* food_position = dGeomGetPosition(foodParticle.odeObject.Geom);
 		return findEuclideanDistance(head_position, food_position);
 	}
 
-	void updateFoodParticleScores()
+	void updateFoodParticleScores( void )
 	{
 		for (auto i = 0; i < foodParticles.size(); ++i)
 		{
 			if ( foodParticles[i].known )
 			{
-				const dReal* head_position = dGeomGetPosition(invis_box.Geom);
+				const dReal* head_position = dGeomGetPosition(head->Geom);
 				const dReal* food_position = dGeomGetPosition(foodParticles[i].odeObject.Geom);
-				foodParticles[i].score = getFoodParticleScore(foodParticles[i]);
+				foodParticles[i].distance = getFoodParticleScore(foodParticles[i]);
 			}
 			else
 			{
-				scan( foodParticles[i] );
+				scanForFood( foodParticles[i] );
 			}
 		}
 	}
@@ -178,7 +249,6 @@ struct Animator {
 		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
 	}
 
-	//void findFoodParticle( ODE
 
 	void Move( void )
 	{
@@ -186,7 +256,7 @@ struct Animator {
 		auto current_v_angle = Radians_To_Degrees( dJointGetUniversalAngle1( *left_leg ) );
 
 
-		static double target_h_angle = 25.0;
+		static double target_h_angle = 45.0;
 		static double target_v_angle = -1.8;
 
 		static bool first_time = true;
@@ -200,8 +270,10 @@ struct Animator {
 			// once legs reach ground, move back
 			if ( current_v_angle > target_v_angle )
 			{
-				if ( known_target_counter > 0 )
+				if ( known_target_counter > 0 || out_of_boundry )
+				{
 					decideDirection();
+				}
 
 				moveBack();
 				first_time = false;
@@ -231,17 +303,24 @@ struct Animator {
 	}
 	
 
-	void seekFoodParticleWithHighestScore()
+	void seekFoodParticleWithHighestScore( void )
 	{
 		updateFoodParticleScores();
 
-		dReal min_distance = 1000.0f;
+		dReal min_distance = 1000000.0f;
 		int min_idx = -1;
+
+		for ( auto i = 0; i < foodParticles.size(); ++i )
+		{
+			if ( foodParticles[i].known ) 
+				foodParticles[i].colored = 1;
+		}
+
 		for (auto i = 0; i < foodParticles.size(); ++i)
 		{
-			if (foodParticles[i].known && foodParticles[i].score < min_distance)
+			if (foodParticles[i].known && foodParticles[i].distance < min_distance)
 			{
-				min_distance = foodParticles[i].score;
+				min_distance = foodParticles[i].distance;
 				min_idx = i;
 			}
 		}
@@ -252,6 +331,7 @@ struct Animator {
 		}
 
 		ndxOfFoodParticleSought = min_idx;
+		foodParticles[min_idx].colored = 2;
 		const dReal* food_position = dGeomGetPosition(foodParticles[min_idx].odeObject.Geom);
 
 		target_position[0] = food_position[0];
@@ -261,8 +341,8 @@ struct Animator {
 
 	Angel::vec4 getCurrentOrientation( void )
 	{
-		const dReal* body_position = dGeomGetPosition(body.Geom);
-		const dReal* box_position = dGeomGetPosition(invis_box.Geom);		//Then, get the geometry position.
+		const dReal* body_position = dGeomGetPosition(body->Geom);
+		const dReal* box_position = dGeomGetPosition(head->Geom);		//Then, get the geometry position.
 
 		Angel::vec4 body_orientation(box_position[0] - body_position[0],
 			box_position[1] - body_position[1],
@@ -274,6 +354,83 @@ struct Animator {
 		return body_orientation;
 	}
 
+	void dealWithBoundries( void )
+	{
+		auto head_position = dBodyGetPosition( head->Body );
+	
+		Angel::vec4 body_orientation = getCurrentOrientation();
+		Angel::vec4 new_direction = Angel::cross( body_orientation, Angel::vec4( 0.0f, 1.0f, 0.0f, 0.0f ) );
+		new_direction = Angel::normalize( new_direction );
+		new_direction.w = 0.0f;
+		
+		if ( head_position[0] < -boundry_threshold || head_position[0] > boundry_threshold || head_position[2] < -boundry_threshold || head_position[2] > boundry_threshold )
+		{
+			out_of_boundry = true;
+
+			auto body_position = dBodyGetPosition( body->Body );
+			auto current_slope = body_orientation.z / body_orientation.x;
+			
+			if ( head_position[0] > boundry_threshold )
+			{
+				if ( current_slope < 0.0f )
+				{
+					target_position[0] = 0.0f;
+					target_position[2] = -boundry_length;
+				}
+				else
+				{
+					target_position[0] = 0.0f;
+					target_position[2] = boundry_length;
+				}
+			}
+			else if ( head_position[0] < -boundry_threshold )
+			{
+				if ( current_slope < 0.0f )
+				{
+					target_position[0] = 0.0f;
+					target_position[2] = boundry_length;
+				}
+				else
+				{
+					target_position[0] = 0.0f;
+					target_position[2] = -boundry_length;
+				}
+			}
+			else if ( head_position[2] > boundry_threshold )
+			{
+				if ( current_slope < 0.0f )
+				{
+					target_position[0] = -boundry_length;
+					target_position[2] = 0.0f;
+				}
+				else
+				{
+					target_position[0] = boundry_length;
+					target_position[2] = 0.0f;
+				}
+			}
+			else if ( head_position[2] < -boundry_threshold )
+			{
+				if ( current_slope < 0.0f )
+				{
+					target_position[0] = boundry_length;
+					target_position[2] = 0.0f;
+				}
+				else
+				{
+					target_position[0] = -boundry_length;
+					target_position[2] = 0.0f;
+				}
+			}
+		}
+		else
+		{
+			out_of_boundry = false;
+
+			return;
+		}
+	}
+
 	float findAlpha( const FoodParticle& food_particle )
 	{
 		const dReal* target_position = dBodyGetPosition( food_particle.odeObject.Body );
@@ -281,7 +438,7 @@ struct Animator {
 		double y_target = target_position[1];
 		double z_target = target_position[2];
 
-		const dReal* body_position = dGeomGetPosition(body.Geom);
+		const dReal* body_position = dGeomGetPosition(body->Geom);
 
 		Angel::vec4 body_orientation = getCurrentOrientation();
 		
@@ -299,14 +456,13 @@ struct Animator {
 		return alpha;
 	}
 
-	// true = right, false = left
-	void decideDirection(void)
+	void decideDirection( void )
 	{
 		double x_target = target_position[0];
 		double y_target = target_position[1];
 		double z_target = target_position[2];
 
-		const dReal* body_position = dGeomGetPosition(body.Geom);
+		const dReal* body_position = dGeomGetPosition(body->Geom);
 
 		Angel::vec4 body_orientation = getCurrentOrientation();
 		
@@ -354,25 +510,7 @@ struct Animator {
 		printf("rightq leg friction = %f.5\n\n", right_leg_friction);*/
 	}
 
-
-	
-
-
 private:
-
-	bool first_time;
-
-	dJointID* right_leg;
-	dJointID* left_leg;
-
-	dJointID* back_right;
-	dJointID* back_left;
-
-	double  speed;
-
-	dReal previous_angle_at_dir_change;
-
-	
 };
 
 
