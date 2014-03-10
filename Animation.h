@@ -28,8 +28,24 @@ struct Animator {
 	dReal max_visible_distance;
 	dReal field_of_view;
 
-	dReal right_leg_friction;
-	dReal left_leg_friction;
+	dReal back_right_outer_leg_friction;
+	dReal back_left_outer_leg_friction;
+	dJointID* midde_right_inner_leg;
+	dJointID* midde_left_inner_leg;
+
+	dJointID* middle_right_outer_leg;
+	dJointID* middle_left_outer_leg;
+
+	dJointID* back_right_leg;
+	dJointID* back_left_leg;
+
+	dReal back_right_leg_scale;
+	dReal back_left_leg_scale;
+
+	double  speed;
+	double back_leg_speed;
+
+	const dReal max_middle_outer_leg_force = 500;
 
 	dReal max_vert_force;
 	dReal max_horiz_force;
@@ -47,36 +63,33 @@ struct Animator {
 	ODEObject* head;
 	ODEObject* body;
 
-	dJointID* right_leg;
-	dJointID* left_leg;
-
-	dJointID* back_right;
-	dJointID* back_left;
-
-	float  speed;
+	dJointID* middle_right_inner_leg;
+	dJointID* middle_left_inner_leg;
 
 	dReal previous_angle_at_dir_change;
 
 	std::vector<FoodParticle> foodParticles;
 	dReal target_position[3];
 
-	Animator( ODEObject* head, ODEObject* body,
-			  dJointID* right, dJointID* left,
-			  dJointID* back_right, dJointID* back_left,
-			  float speed,
-			  dReal max_vert_force, dReal max_horiz_force)
+	Animator(	ODEObject* head, ODEObject* body,
+				dJointID* middle_right_inner_leg, dJointID* middle_left_inner_leg,
+				dJointID* middle_right_outer_leg, dJointID* middle_left_outer_leg,
+				dJointID* back_right_leg, dJointID* back_left_leg,
+				float speed, double back_leg_speed,
+				dReal max_vert_force, dReal max_horiz_force)
 												  : active(false), first_time( true ), starving( true ), out_of_boundry( false ),
 												    known_target_counter( 0 ),
 												    max_visible_distance( 40.0f ), field_of_view( 85.0f ),
-												    right_leg_friction(0.0f), left_leg_friction(0.0f),
+												    back_right_outer_leg_friction(0.0f), back_left_outer_leg_friction(0.0f),
 												    max_vert_force(max_vert_force), max_horiz_force(max_horiz_force ),
 													boundry_length( 50.0f ), boundry_threshold( 49.5f ),
 												    energy_consumption_period( 1000ll ), energy_consumption_per_period( 1 ),
 													current_energy_level( 100 ), starvation_threshold( 15 ),
 												    head( head ), body( body ),
-													right_leg( right ), left_leg( left ),
-												    back_right( back_right ), back_left( back_left ),
-												    speed( speed ),
+													middle_right_inner_leg(middle_right_inner_leg), middle_left_inner_leg(middle_left_inner_leg),
+													middle_right_outer_leg(middle_right_outer_leg), middle_left_outer_leg(middle_left_outer_leg),
+												    back_right_leg( back_right_leg ), back_left_leg( back_left_leg ),
+													speed(speed), back_leg_speed(back_leg_speed),
 												    previous_angle_at_dir_change( 0.0f )
 	{
 		target_position[0] = 0.0f;
@@ -192,114 +205,169 @@ struct Animator {
 	{
 		foodParticles.erase(foodParticles.begin() + ndxOfFoodParticleSought);
 		ndxOfFoodParticleSought = -1;
-		right_leg_friction = 0.0f;
-		left_leg_friction = 0.0f;
+		back_right_outer_leg_friction = 0.0f;
+		back_left_outer_leg_friction = 0.0f;
 		--known_target_counter;
 	}
 
-	void moveDown( void )
+	void moveBackLegBack()
 	{
-		dJointSetUniversalParam(*left_leg, dParamVel, speed);
-		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*left_leg, dParamVel2, 0);
-		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
+		dJointSetUniversalParam(*back_left_leg, dParamVel, 0);
+		dJointSetUniversalParam(*back_left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*back_left_leg, dParamVel2, back_left_leg_scale * back_leg_speed);
+		dJointSetUniversalParam(*back_left_leg, dParamFMax2, max_horiz_force);
 
-		dJointSetUniversalParam(*right_leg, dParamVel, -speed);
-		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*right_leg, dParamVel2, 0);
-		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+		dJointSetUniversalParam(*back_right_leg, dParamVel, 0);
+		dJointSetUniversalParam(*back_right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*back_right_leg, dParamVel2, -back_right_leg_scale * back_leg_speed);
+		dJointSetUniversalParam(*back_right_leg, dParamFMax2, max_horiz_force);
+	}
+	void moveBackLegForward()
+	{
+		dJointSetUniversalParam(*back_left_leg, dParamVel, 0);
+		dJointSetUniversalParam(*back_left_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*back_left_leg, dParamVel2, -back_leg_speed);
+		dJointSetUniversalParam(*back_left_leg, dParamFMax2, max_horiz_force);
+
+		dJointSetUniversalParam(*back_right_leg, dParamVel, 0);
+		dJointSetUniversalParam(*back_right_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*back_right_leg, dParamVel2, back_leg_speed);
+		dJointSetUniversalParam(*back_right_leg, dParamFMax2, max_horiz_force);
+	}
+	void moveMiddleInnerLegDown()
+	{
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel, speed);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax2, max_horiz_force);
+
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel, -speed);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax2, max_horiz_force);
 	}
 
-	void moveUp( void )
+	void moveMiddleInnerLegUp()
 	{
-		dJointSetUniversalParam(*left_leg, dParamVel, -speed);
-		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*left_leg, dParamVel2, 0);
-		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel, -speed);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax2, max_horiz_force);
 
-		dJointSetUniversalParam(*right_leg, dParamVel, speed);
-		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*right_leg, dParamVel2, 0);
-		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel, speed);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel2, 0);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax2, max_horiz_force);
 	}
 
-	void moveBack( void )
+	void moveMiddleOuterLegBack()
 	{
-		dJointSetUniversalParam(*left_leg, dParamVel, 0);
-		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*left_leg, dParamVel2, speed);
-		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
+		dJointSetHingeParam(*middle_right_outer_leg, dParamVel, -speed * 2 / 3);
+		dJointSetHingeParam(*middle_right_outer_leg, dParamFMax, max_middle_outer_leg_force);
 
-		dJointSetUniversalParam(*right_leg, dParamVel, 0);
-		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*right_leg, dParamVel2, -speed);
-		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+		dJointSetHingeParam(*middle_left_outer_leg, dParamVel, speed * 2 / 3);
+		dJointSetHingeParam(*middle_left_outer_leg, dParamFMax, max_middle_outer_leg_force);
 	}
 
-	void moveForward( void )
+	void moveMiddleOuterLegForward()
 	{
-		dJointSetUniversalParam(*left_leg, dParamVel, 0);
-		dJointSetUniversalParam(*left_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*left_leg, dParamVel2, -speed);
-		dJointSetUniversalParam(*left_leg, dParamFMax2, max_horiz_force);
+		dJointSetHingeParam(*middle_right_outer_leg, dParamVel, speed * 2 / 3);
+		dJointSetHingeParam(*middle_right_outer_leg, dParamFMax, max_middle_outer_leg_force);
 
-		dJointSetUniversalParam(*right_leg, dParamVel, 0);
-		dJointSetUniversalParam(*right_leg, dParamFMax, max_vert_force);
-		dJointSetUniversalParam(*right_leg, dParamVel2, speed);
-		dJointSetUniversalParam(*right_leg, dParamFMax2, max_horiz_force);
+		dJointSetHingeParam(*middle_left_outer_leg, dParamVel, -speed * 2 / 3);
+		dJointSetHingeParam(*middle_left_outer_leg, dParamFMax, max_middle_outer_leg_force);
+	}
+
+	void moveMiddleInnerLegBack()
+	{
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel, 0);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel2, speed);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax2, max_horiz_force);
+
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel, 0);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel2, -speed);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax2, max_horiz_force);
+	}
+
+	void moveMiddleInnerLegForward()
+	{
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel, 0);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamVel2, -speed);
+		dJointSetUniversalParam(*middle_left_inner_leg, dParamFMax2, max_horiz_force);
+
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel, 0);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax, max_vert_force);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamVel2, speed);
+		dJointSetUniversalParam(*middle_right_inner_leg, dParamFMax2, max_horiz_force);
 	}
 
 
 	void Move( void )
 	{
-		auto current_h_angle = Radians_To_Degrees( dJointGetUniversalAngle2( *right_leg ) );
-		auto current_v_angle = Radians_To_Degrees( dJointGetUniversalAngle1( *left_leg ) );
+		auto current_h_angle = Radians_To_Degrees( dJointGetUniversalAngle2( *middle_right_inner_leg ) );
+		auto current_v_angle = Radians_To_Degrees(dJointGetUniversalAngle1(*middle_left_inner_leg));
 
 
-		static double target_h_angle = 45.0;
-		static double target_v_angle = -1.8;
+		static double target_backward_horiz_angle = -45.0;
+		static double target_forward_horiz_angle = 45;
+		static double target_upward_vert_angle = -20;
+		static double target_downward_vert_angle = 1.8;
 
 		static bool first_time = true;
-		static bool forward = true;
+		
 
-		if ( first_time ) moveForward();
+		if (first_time) moveMiddleInnerLegForward();
 
 		// once legs reach forward target angle
-		if ( forward && current_h_angle > target_h_angle )
+		if (is_middle_inner_leg_moving_forward && current_h_angle > target_forward_horiz_angle)
 		{
 			// once legs reach ground, move back
-			if ( current_v_angle > target_v_angle )
+			if (current_v_angle > target_downward_vert_angle)
 			{
 				if ( known_target_counter > 0 || out_of_boundry )
 				{
 					decideDirection();
 				}
 
-				moveBack();
+				moveMiddleInnerLegBack();
+				moveMiddleOuterLegBack();
+				moveBackLegBack();
 				first_time = false;
-				forward = false;
-				target_h_angle = -target_h_angle;
+				is_middle_inner_leg_moving_forward = false;
 			}
 			else
 			{
-				moveDown();
+				moveMiddleInnerLegDown();
 			}
 		}
 		//legs have reached backward target angle
-		else if ( !forward && current_h_angle < target_h_angle )
+		else if (!is_middle_inner_leg_moving_forward && current_h_angle < target_backward_horiz_angle)
 		{
 			// as soon as legs are above the ground, move forward
-			if ( current_v_angle < target_v_angle )
+			if (current_v_angle < target_upward_vert_angle)
 			{
-				moveForward();
-				forward = true;
-				target_h_angle = -target_h_angle;
+				moveMiddleInnerLegForward();
+				moveMiddleOuterLegForward();
+				setBackLegFriction(minFriction);
+				moveBackLegForward();
+				is_middle_inner_leg_moving_forward = true;
 			}
 			else
 			{
-				moveUp();
+				moveMiddleInnerLegUp();
 			}
 		}
+	}
+
+	void setBackLegFriction(const dReal friction)
+	{
+
+		back_right_outer_leg_friction = friction;
+		back_left_outer_leg_friction = friction;
+
 	}
 	
 
@@ -490,27 +558,45 @@ struct Animator {
 		{
 			absCosBeta = 1 - absCosBeta;
 		}
-		auto frictionScale = std::fmax(absCosBeta, 0.2f);
+		//auto frictionScale = std::fmax(absCosBeta, 0.2f);
+		const dReal maxFriction = 200;
+		auto frictionScale = absCosBeta;
+		
 
+		const dReal scaledFriction = std::fmax(frictionScale * maxFriction, minFriction);
+
+		//turn right
 		if (cosBeta >= 0.0)
 		{
-			right_leg_friction = 0.0;
-			left_leg_friction = frictionScale * 30.0;
+			back_right_outer_leg_friction = scaledFriction;
+			back_left_outer_leg_friction = minFriction;
+			back_right_leg_scale = 1 - frictionScale;
+			back_left_leg_scale = 1 + frictionScale;
 		}
+		//turning left
 		else if (cosBeta < 0.0)
 		{
-			right_leg_friction = frictionScale * 30.0;
-			left_leg_friction = 0.0;
+			back_right_outer_leg_friction = minFriction;
+			back_left_outer_leg_friction = scaledFriction;
+
+			back_right_leg_scale = 1 + frictionScale;
+			back_left_leg_scale = 1 - frictionScale;
 		}
+
 		
 		/*printf("cosine = %f.5\n", cosBeta);
-		printf("angle  = %f.5\n\n", beta);
+		printf("angle  = %f.5\n\n", beta);*/
 		printf("frictionScale = %f.5\n", frictionScale);
-		printf("left leg friction = %f.5\n", left_leg_friction);
-		printf("rightq leg friction = %f.5\n\n", right_leg_friction);*/
+		printf("left leg friction = %f.5\n", back_left_outer_leg_friction);
+		printf("rightq leg friction = %f.5\n\n", back_right_outer_leg_friction);
+		printf("left leg vel scale = %f.5\n", back_left_leg_scale);
+		printf("right leg vel scale = %f.5\n\n", back_right_leg_scale);
 	}
 
 private:
+
+	bool is_middle_inner_leg_moving_forward = true;
+	const dReal minFriction = 5;
 };
 
 

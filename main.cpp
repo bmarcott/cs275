@@ -65,7 +65,7 @@ double g_time = 0.0 ;
 
 /////////////////////////// ODE Global Variables ///////////////////////////////
 dReal simulationTime = 0.0f;
-dReal simulationStep = 0.01f;
+dReal simulationStep = 0.025f;
 
 ODEObject head;
 ODEObject body;				//Insect Body
@@ -87,7 +87,7 @@ dJointGroupID jointgroup;   // contact group for the new joint
 dJointGroupID ContactGroup;	//Group of contact joints for collision detection/handling.
 ODEObject target;
 
-
+dJointID Joint;
 dJointID Joint2;
 dJointID frLegJoint;
 dJointID froLegJoint;
@@ -111,10 +111,12 @@ std::mt19937 rng_engine;
 //*******WARNING**********
 std::vector<ODEObject> objectsToDestroy;
 
-Animator animator( &head, &body,
-				   &mrLegJoint, &mlLegJoint, &brLegJoint, &blLegJoint,
-				   1.0f,
-				   100.0f, 1000.0f );
+Animator animator(	&head, &body, 
+				&mrLegJoint, &mlLegJoint, 
+				&mroLegJoint, &mloLegJoint, 
+				&brLegJoint, &blLegJoint, 
+				1.0, 0.75, 
+				1000.0, 2000.0);
 
 
 /*
@@ -160,7 +162,49 @@ void createFixedLeg(ODEObject &leg,
 #include "vec.h"
 #include <cmath>
 
+void createHingeLeg(ODEObject &leg,
+	ODEObject &bodyAttachedTo,
+	dJointID &joint,
+	dReal xPos, dReal yPos, dReal zPos,
+	dReal xRot, dReal yRot, dReal zRot,
+	dReal radius, dReal length,
+	dReal maxAngle, dReal minAngle,
+	dReal anchorXPos, dReal anchorYPos, dReal anchorZPos)
+{
+	dMatrix3 legOrient;
+	dRFromEulerAngles(legOrient, xRot, yRot, zRot);
 
+	//position and orientation
+	leg.Body = dBodyCreate(World);
+	dBodySetPosition(leg.Body, xPos, yPos, zPos);
+	dBodySetRotation(leg.Body, legOrient);
+	dBodySetLinearVel(leg.Body, 0, 0, 0);
+	dBodySetData(leg.Body, (void *)0);
+
+	//mass
+	dMass legMass;
+	dMassSetCapsule(&legMass, 1, 3, radius, length);
+	//dBodySetMass(leg.Body, &legMass);
+
+	//geometry
+	leg.Geom = dCreateCapsule(Space, radius, length);
+	dGeomSetBody(leg.Geom, leg.Body);
+
+	//hinge joint
+	joint = dJointCreateHinge(World, jointgroup);
+
+	//attach and anchor
+	dJointAttach(joint, bodyAttachedTo.Body, leg.Body);
+	dJointSetHingeAnchor(joint, anchorXPos, anchorYPos, anchorZPos);
+
+	//axes
+	dJointSetHingeAxis(joint, 0, 1, 0);
+
+	//Max and min angles
+	dJointSetHingeParam(joint, dParamHiStop, maxAngle);
+	dJointSetHingeParam(joint, dParamLoStop, minAngle);
+
+}
 
 
 
@@ -375,24 +419,79 @@ void createMiddleLegs()
 	const dReal yPosOuter = 2;
 	const dReal zPosOuter = 0;
 	const dReal xRotOuter = 0;
-	const dReal yRotOuter = PI/2;
+	const dReal yRotOuter = PI / 2;
 	const dReal zRotOuter = 0;
 	const dReal radiusOuter = 0.15;
 	const dReal lengthOuter = 5;
+	const dReal maxAngleOuter = PI / 4;
+	const dReal minAngleOuter = -PI / 4;
+	const dReal anchorXPosOuter = -5.4;
+	const dReal anchorYPosOuter = 2.0;
+	const dReal anchorZPosOuter = 0;
 
-	createFixedLeg(middleLeftOuterLeg,
-		middleLeftLeg,
-		mloLegJoint,
-		-xPosOuter, yPosOuter, zPosOuter,
-		xRotOuter, -yRotOuter, zRotOuter,
-		radiusOuter, lengthOuter);
-
-	createFixedLeg(middleRightOuterLeg,
+	createHingeLeg(middleRightOuterLeg,
 		middleRightLeg,
 		mroLegJoint,
 		xPosOuter, yPosOuter, zPosOuter,
 		xRotOuter, yRotOuter, zRotOuter,
-		radiusOuter, lengthOuter);
+		radiusOuter, lengthOuter,
+		maxAngleOuter, minAngleOuter,
+		anchorXPosOuter, anchorYPosOuter, anchorZPosOuter);
+
+	//// target
+	//dMatrix3 Orient3;
+	//target.Body = dBodyCreate(World);
+	//dBodySetPosition(target.Body, anchorXPosOuter, anchorYPosOuter, anchorZPosOuter);
+	//dRFromEulerAngles(Orient3, 0.0, 0.0, 0.0);
+	//dBodySetRotation(target.Body, Orient3);
+	//dBodySetLinearVel(target.Body, 0.0, 0.0, 0.0);
+	//dBodySetData(target.Body, (void *)0);
+	//dMass targetMass;
+	//dMassSetBox(&targetMass, 1.0, 1.0, 1.0, 1.0);
+	//dBodySetMass(target.Body, &targetMass);
+	//target.Geom = dCreateBox(Space, 1.0, 1.0, 1.0);
+	//dGeomSetBody(target.Geom, target.Body);
+
+	createHingeLeg(middleLeftOuterLeg,
+		middleLeftLeg,
+		mloLegJoint,
+		-xPosOuter, yPosOuter, zPosOuter,
+		xRotOuter, -yRotOuter, zRotOuter,
+		radiusOuter, lengthOuter,
+		maxAngleOuter, minAngleOuter,
+		-anchorXPosOuter, anchorYPosOuter, anchorZPosOuter);
+
+	/*createFixedLeg(middleLeftOuterLeg,
+	middleLeftLeg,
+	mloLegJoint,
+	-xPosOuter, yPosOuter, zPosOuter,
+	xRotOuter, -yRotOuter, zRotOuter,
+	radiusOuter, lengthOuter);*/
+
+	//createFixedLeg(middleRightOuterLeg,
+	//	middleRightLeg,
+	//	mroLegJoint,
+	//	xPosOuter, yPosOuter, zPosOuter,
+	//	xRotOuter, yRotOuter, zRotOuter,
+	//	radiusOuter, lengthOuter);
+
+
+
+	/*createUniversalSquareLeg(middleLeftLeg,
+	mlLegJoint,
+	3, 1, 0,
+	0, 0, 0,
+	sides,
+	maxAngle, minAngle,
+	0, 1, 0);*/
+
+	/*createUniversalSquareLeg(middleLeftLeg,
+	mlLegJoint,
+	-xPos, yPos, zPos,
+	xRot, -yRot, zRot,
+	sides,
+	maxAngle, minAngle,
+	1.25, anchorYPos, anchorZPos);*/
 }
 
 /*
@@ -404,40 +503,51 @@ create back two legs of insect with fixed joints
 */
 void createBackLegs()
 {
-	const dReal xPos = -2.8;
-	const dReal yPos = 3.7;
+	const dReal xPos = -2.4;
+	const dReal yPos = 3.3;
 	const dReal zPos = 3;
-	const dReal xRot = -PI/4;
-	const dReal yRot = PI/4;
+	const dReal xRot = -PI / 4;
+	const dReal yRot = PI / 5;
 	const dReal zRot = 0;
 	const dReal radius = 0.15;
 	const dReal length = 5;
 
-	//create back right leg
-	createFixedLeg(brLeg, body, brLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length);
-	//create back left leg
-	createFixedLeg(blLeg, body, blLegJoint, -xPos, yPos, zPos, xRot, -yRot, zRot, radius, length);
-
-	const dReal maxAngle = PI / 4;
-	const dReal minAngle = -PI / 4;
+	const dReal maxAngle = PI / 8;
+	const dReal minAngle = -PI / 8;
 	const dReal anchorXPos = -1;
-	const dReal anchorYPos = 4.7;
-	const dReal anchorZPos = 0;
-	dReal sides[3];
-	sides[0] = 5;
-	sides[1] = sides[2] = .15;
+	const dReal anchorYPos = 4.8;
+	const dReal anchorZPos = 1.5;
+
+	//create back right leg
+	//createFixedLeg(brLeg, body, brLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length);
+	createUniversalLeg(brLeg, body, brLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length,
+		maxAngle, minAngle, anchorXPos, anchorYPos, anchorZPos
+		);
+	//create back left leg
+	//createFixedLeg(blLeg, body, blLegJoint, -xPos, yPos, zPos, xRot, -yRot, zRot, radius, length);
+	createUniversalLeg(blLeg, body, blLegJoint, -xPos, yPos, zPos, xRot, -yRot, zRot, radius, length,
+		maxAngle, minAngle, -anchorXPos, anchorYPos, anchorZPos
+		);
+	//const dReal maxAngle = PI / 4;
+	//const dReal minAngle = -PI / 4;
+	//const dReal anchorXPos = -1;
+	//const dReal anchorYPos = 4.7;
+	//const dReal anchorZPos = 0;
+	//dReal sides[3];
+	//sides[0] = 5;
+	//sides[1] = sides[2] = .15;
 
 	//createUniversalLeg_BACK( brLeg, body, brLegJoint, xPos, yPos, zPos, xRot, yRot, zRot, radius, length, maxAngle, minAngle, anchorXPos, anchorYPos, anchorZPos );
 	//createUniversalLeg_BACK( blLeg, body, blLegJoint, -xPos, yPos, zPos, xRot, -yRot, zRot, radius, length, maxAngle, minAngle, anchorXPos, anchorYPos, anchorZPos );
 
-	const dReal xPosOuter = -5.7;
-	const dReal yPosOuter = 2.4;
-	const dReal zPosOuter = 6.8;
-	const dReal xRotOuter = 0;
-	const dReal yRotOuter = PI/8;
-	const dReal zRotOuter = 0;
+	const dReal xPosOuter = -4.4;
+	const dReal yPosOuter = 1.8;
+	const dReal zPosOuter = 7.0;
+	const dReal xRotOuter = 0.0;
+	const dReal yRotOuter = PI / 16;
+	const dReal zRotOuter = 0.0;
 	const dReal radiusOuter = 0.15;
-	const dReal lengthOuter = 5;
+	const dReal lengthOuter = 5.0;
 
 	createFixedLeg(backLeftOuterLeg,
 		blLeg,
@@ -634,20 +744,20 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 		{
 			if ( o1 == backLeftOuterLeg.Geom || o2 == backLeftOuterLeg.Geom )
 			{
-				contacts[I].surface.mu = animator.left_leg_friction;
+				contacts[I].surface.mu = animator.back_left_outer_leg_friction;
 			}
 			else if ( o1 == backRightOuterLeg.Geom || o2 == backRightOuterLeg.Geom )
 			{
-				contacts[I].surface.mu = animator.right_leg_friction;
+				contacts[I].surface.mu = animator.back_right_outer_leg_friction;
 			}
 			else
 			{
-				contacts[I].surface.mu = 0.0;
+				contacts[I].surface.mu = 40.0;
 			}
 		}
 		else
 		{
-			contacts[I].surface.mu = 10.0;
+			contacts[I].surface.mu = 30.0;
 		}
 
 		if (animator.getIndexOfFoodParticleSought() > -1)
@@ -673,7 +783,7 @@ static void nearCallBack( void *data, dGeomID o1, dGeomID o2 )
 		}
 
 		//contacts[I].surface.mu = 1;
-		contacts[I].surface.mu2 = 10;
+		//contacts[I].surface.mu2 = 10;
 		contacts[I].surface.bounce = 0.01;
 		contacts[I].surface.bounce_vel = 0.1;
 		contacts[I].surface.soft_cfm = 0.01;
@@ -835,8 +945,8 @@ void simulationLoop()
 	{
 		animator.seekFoodParticleWithHighestScore();
 	
-		printf( "# known food particles = %d\n", animator.known_target_counter );
-		printf( "\t\ttarget = %f.3, %f.3\n\n", animator.target_position[0], animator.target_position[2] );
+		//printf( "# known food particles = %d\n", animator.known_target_counter );
+		//printf( "\t\ttarget = %f.3, %f.3\n\n", animator.target_position[0], animator.target_position[2] );
 	}
 
 	// FOR DEBUGGING
